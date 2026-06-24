@@ -176,7 +176,7 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
           failedDocs++;
         }
 
-        const amt = d.totalAmount ?? d.totalPendiente ?? 0;
+        const amt = d.tipo === 'OC' ? 0 : (d.totalAmount ?? d.totalPendiente ?? 0);
         totalValue += amt;
       });
 
@@ -236,7 +236,7 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
       groups[m.date].totalDocs += docs.length;
       
       docs.forEach(d => {
-        const amt = d.totalAmount ?? d.totalPendiente ?? 0;
+        const amt = d.tipo === 'OC' ? 0 : (d.totalAmount ?? d.totalPendiente ?? 0);
         groups[m.date].load += amt;
         
         if (d.trackingStatus === 'ENTREGADO' || d.trackingStatus === 'RETIRADO') {
@@ -309,7 +309,7 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
       routeGroups[rId].totalDocs += docs.length;
 
       docs.forEach(d => {
-        const amt = d.totalAmount ?? d.totalPendiente ?? 0;
+        const amt = d.tipo === 'OC' ? 0 : (d.totalAmount ?? d.totalPendiente ?? 0);
         routeGroups[rId].totalLoad += amt;
 
         if (d.trackingStatus === 'ENTREGADO' || d.trackingStatus === 'RETIRADO') {
@@ -418,7 +418,7 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
         if (d.trackingStatus === 'ENTREGADO' || d.trackingStatus === 'RETIRADO') {
           vehicleGroups[vId].deliveredDocs++;
         }
-        const amt = d.totalAmount ?? d.totalPendiente ?? 0;
+        const amt = d.tipo === 'OC' ? 0 : (d.totalAmount ?? d.totalPendiente ?? 0);
         vehicleGroups[vId].totalValue += amt;
       });
 

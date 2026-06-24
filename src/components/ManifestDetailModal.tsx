@@ -241,7 +241,7 @@ export default function ManifestDetailModal({
                       />
                     </td>
                   <td className="px-4 py-3 text-right font-normal font-mono text-slate-900">
-                    {doc.tipo === 'OC' ? '-' : `$${Math.round(doc.totalAmount ?? doc.totalPendiente).toLocaleString('es-CL')}`}
+                    {doc.tipo === 'OC' ? '$0' : `$${Math.round(doc.totalAmount ?? doc.totalPendiente).toLocaleString('es-CL')}`}
                   </td>
                 </tr>
               ))}

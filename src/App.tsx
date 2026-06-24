@@ -176,7 +176,7 @@ export default function App() {
       const docs = m.documentsSnapshot || [];
       totalDocs += docs.length;
       docs.forEach(d => {
-        const amt = d.totalAmount ?? d.totalPendiente ?? 0;
+        const amt = d.tipo === 'OC' ? 0 : (d.totalAmount ?? d.totalPendiente ?? 0);
         totalValue += amt;
         
         const status = d.trackingStatus || 'EN CURSO';
@@ -2376,7 +2376,7 @@ export default function App() {
                                 
                                 const progress = total > 0 ? Math.round((completed / total) * 100) : 0;
                                 const otif = total > 0 ? Math.round((otifNum / total) * 100) : 0;
-                                const totalVal = pts.reduce((s,d) => s + (d.totalAmount ?? d.totalPendiente), 0) || 0;
+                                const totalVal = pts.reduce((s,d) => d.tipo === 'OC' ? s : s + (d.totalAmount ?? d.totalPendiente), 0) || 0;
                                 
                                 let routeStateLabel = 'No Iniciado';
                                 let routeStateColor = 'bg-slate-100 text-slate-600 border-slate-200';
@@ -2510,7 +2510,7 @@ export default function App() {
                                     </thead>
                                     <tbody className="divide-y divide-slate-150">
                                       {pts.map((doc, idx) => {
-                                        const docAmt = doc.totalAmount ?? doc.totalPendiente ?? 0;
+                                        const docAmt = doc.tipo === 'OC' ? 0 : (doc.totalAmount ?? doc.totalPendiente ?? 0);
                                         return (
                                           <tr key={doc.id || idx} className="hover:bg-slate-50/50 transition-colors">
                                             <td className="py-2 px-2 font-mono font-bold text-slate-900 shrink-0">
@@ -3083,7 +3083,7 @@ export default function App() {
               <div className="mt-auto p-4 bg-slate-900 rounded-xl text-white shadow-xl">
                 <p className="text-[10px] text-slate-400 uppercase font-semibold mb-2">Resumen Pendiente</p>
                 <p className="text-xl font-mono tracking-tighter">
-                  ${Math.round(filteredDocuments.reduce((sum, d) => sum + d.totalPendiente, 0)).toLocaleString('es-CL')}
+                  ${Math.round(filteredDocuments.reduce((sum, d) => d.tipo === 'OC' ? sum : sum + d.totalPendiente, 0)).toLocaleString('es-CL')}
                 </p>
                 <div className="w-full bg-slate-700 h-1.5 mt-3 rounded-full overflow-hidden">
                   <div 
@@ -3178,7 +3178,7 @@ export default function App() {
                               {doc.assignment?.dispatchDate ? new Date(doc.assignment.dispatchDate + 'T12:00:00').toLocaleDateString('es-CL') : '-'}
                           </td>
                           <td className="py-4 px-6 text-right font-mono text-slate-800">
-                              ${Math.round(doc.totalPendiente).toLocaleString('es-CL')}
+                              ${Math.round(doc.tipo === 'OC' ? 0 : doc.totalPendiente).toLocaleString('es-CL')}
                           </td>
                           <td className="py-4 px-6">
                               <span className={`px-2 py-1 rounded-[4px] text-[9px] uppercase tracking-wider ${isProgrammed ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
@@ -3278,7 +3278,7 @@ export default function App() {
                       <p className="text-[10px] font-normal text-slate-400 uppercase tracking-wider mb-2">Seleccionado</p>
                       <div className={`flex items-center justify-between font-normal mb-1 ${selectedDoc.tipo === 'OC' ? 'text-teal-700' : 'text-indigo-700'}`}>
                         <h3 className="text-lg tracking-tighter">{formatDocId(selectedDoc.tipo, selectedDoc.id)}</h3>
-                        <span className="text-sm border-l border-slate-100 pl-3 font-mono">${Math.round(selectedDoc.totalPendiente).toLocaleString('es-CL')}</span>
+                        <span className="text-sm border-l border-slate-100 pl-3 font-mono">${Math.round(selectedDoc.tipo === 'OC' ? 0 : selectedDoc.totalPendiente).toLocaleString('es-CL')}</span>
                       </div>
                       <p className="text-xs text-slate-600 font-normal truncate">{selectedDoc.razonSocial}</p>
                     </div>
@@ -3543,7 +3543,7 @@ export default function App() {
                         <div className="h-8 w-px bg-slate-700"></div>
                         <div className="flex flex-col text-right">
                           <span className="text-[9px] font-bold text-slate-400 uppercase">Valor Total</span>
-                          <span className="text-sm font-mono font-bold">${Math.round(hojaDeRutaDocs.reduce((s,d) => s + d.totalPendiente, 0)).toLocaleString('es-CL')}</span>
+                          <span className="text-sm font-mono font-bold">${Math.round(hojaDeRutaDocs.reduce((s,d) => d.tipo === 'OC' ? s : s + d.totalPendiente, 0)).toLocaleString('es-CL')}</span>
                         </div>
                       </div>
                     </div>
@@ -3999,7 +3999,7 @@ export default function App() {
                           d.trackingStatus === 'NO RETIRADO'
                         ).length ?? 0;
                         const pendingPoints = totalPoints - completedPoints;
-                        const totalEstVal = manifest.documentsSnapshot?.reduce((s,d) => s + (d.totalAmount ?? d.totalPendiente), 0) || 0;
+                        const totalEstVal = manifest.documentsSnapshot?.reduce((s,d) => d.tipo === 'OC' ? s : s + (d.totalAmount ?? d.totalPendiente), 0) || 0;
                         
                         const isTrackingComplete = totalPoints > 0 && totalPoints === completedPoints;
                         const trackingProgress = totalPoints > 0 ? Math.round((completedPoints / totalPoints) * 100) : 0;
