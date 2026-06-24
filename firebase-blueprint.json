@@ -1,0 +1,113 @@
+{
+  "entities": {
+    "LogisticsAssignment": {
+      "title": "Logistics Assignment",
+      "description": "Logistics planning details for a specific document.",
+      "type": "object",
+      "properties": {
+        "documentId": { "type": "string", "description": "The unique ID of the NV or OC document." },
+        "route": { "type": "string", "enum": ["RM", "VI", "V", "UNASSIGNED"] },
+        "dispatchDate": { "type": "string", "format": "date" },
+        "observations": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["documentId", "route"]
+    },
+    "PendingDocument": {
+      "title": "Pending Document",
+      "description": "Information about a pending sales or purchase document.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "fecha": { "type": "string", "format": "date-time" },
+        "tipo": { "type": "string", "enum": ["NV", "OC"] },
+        "razonSocial": { "type": "string" },
+        "vendedor": { "type": "string" },
+        "totalPendiente": { "type": "number" },
+        "observaciones": { "type": "string" },
+        "uploadedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "tipo", "razonSocial"]
+    },
+    "LogisticsRoute": {
+      "title": "Logistics Route",
+      "description": "Custom route for logistics assignments.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name"]
+    },
+    "LogisticsDriver": {
+      "title": "Logistics Driver",
+      "description": "Information about a driver.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name"]
+    },
+    "LogisticsVehicle": {
+      "title": "Logistics Vehicle",
+      "description": "Information about a vehicle.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "plate": { "type": "string" },
+        "description": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["plate"]
+    },
+    "LogisticsManifest": {
+      "title": "Logistics Manifest",
+      "description": "Manifest linking a route and date to a driver and vehicle, with definitive status.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "routeId_date" },
+        "driverId": { "type": "string" },
+        "vehicleId": { "type": "string" },
+        "routeId": { "type": "string" },
+        "date": { "type": "string" },
+        "isFinalized": { "type": "boolean" },
+        "routeNumber": { "type": "integer" },
+        "startTime": { "type": "string" },
+        "endTime": { "type": "string" },
+        "pendingPoints": { "type": "integer" },
+        "totalPoints": { "type": "integer" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["routeId", "date"]
+    }
+  },
+  "firestore": {
+    "/assignments/{assignmentId}": {
+      "schema": "LogisticsAssignment",
+      "description": "Collection of logistics assignments indexed by document ID."
+    },
+    "/pending_documents/{docId}": {
+      "schema": "PendingDocument",
+      "description": "Collection of pending documents parsed from Excel files."
+    },
+    "/routes/{routeId}": {
+      "schema": "LogisticsRoute",
+      "description": "Collection of custom logistics routes."
+    },
+    "/drivers/{id}": {
+      "schema": "LogisticsDriver",
+      "description": "Collection of drivers."
+    },
+    "/vehicles/{id}": {
+      "schema": "LogisticsVehicle",
+      "description": "Collection of vehicles."
+    },
+    "/manifests/{id}": {
+      "schema": "LogisticsManifest",
+      "description": "Collection of manifests."
+    }
+  }
+}

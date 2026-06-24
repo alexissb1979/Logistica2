@@ -1,0 +1,6 @@
+{
+  "name": "Logistica Antko",
+  "description": "Sistema de gestión logística para planificación de rutas, despacho, asignación de conductores/vehículos y generación de manifiestos.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
