@@ -251,6 +251,7 @@ export default function App() {
     docNumber: '',
     razonSocial: '',
     guideNumber: '',
+    location: '',
     logisticsNotes: ''
   });
   const [newPointAmountStr, setNewPointAmountStr] = useState('');
@@ -336,11 +337,15 @@ export default function App() {
       return manifest.documentsSnapshot.map(d => ({
         id: d.id,
         tipo: d.tipo as LogisticsDocumentType,
-        fecha: new Date(), 
+        fecha: d.fecha ? (d.fecha instanceof Date ? d.fecha : new Date(d.fecha)) : new Date(), 
         razonSocial: d.razonSocial,
         vendedor: '',
         totalPendiente: d.totalPendiente,
         detalle: d.detalle || [{ codigo: '-', descripcion: 'Información de items no disponible en snapshot histórico', cantidad: 0, precio: 0, total: 0 }],
+        trackingStatus: d.trackingStatus || 'EN CURSO',
+        trackingObservation: d.trackingObservation || '',
+        proceso: d.proceso || 'ENTREGA',
+        location: d.location || '',
         assignment: {
           documentId: d.id,
           route: hrSelectedRoute,
@@ -360,7 +365,16 @@ export default function App() {
     const liveDocs = mergedDocuments.filter(doc => 
         doc.assignment?.route === hrSelectedRoute && 
         doc.assignment?.dispatchDate === hrSelectedDate
-    );
+    ).map(doc => {
+      const snapDoc = manifest?.documentsSnapshot?.find(d => d.id === doc.id);
+      return {
+        ...doc,
+        trackingStatus: snapDoc?.trackingStatus || 'EN CURSO',
+        trackingObservation: snapDoc?.trackingObservation || '',
+        proceso: snapDoc?.proceso || 'ENTREGA',
+        location: doc.assignment?.location || snapDoc?.location || '',
+      };
+    });
 
     const liveIds = new Set(liveDocs.map(d => d.id));
 
@@ -387,6 +401,10 @@ export default function App() {
           isMissingFromImport: !isAdd, // Only marked as REVISAR if not a manual additional point
           isOrphaned: !isAdd,
           isAdditional: isAdd,
+          trackingStatus: snapDoc?.trackingStatus || 'EN CURSO',
+          trackingObservation: snapDoc?.trackingObservation || '',
+          proceso: snapDoc?.proceso || 'ENTREGA',
+          location: asm.location || snapDoc?.location || '',
           assignment: asm
         } as MergedDocument;
       });
@@ -407,6 +425,10 @@ export default function App() {
             detalle: d.detalle || [{ codigo: '-', descripcion: 'Ítems no disponibles', cantidad: 0, precio: 0, total: 0 }],
             isOrphaned: !d.isAdditional,
             isAdditional: d.isAdditional,
+            trackingStatus: d.trackingStatus || 'EN CURSO',
+            trackingObservation: d.trackingObservation || '',
+            proceso: d.proceso || 'ENTREGA',
+            location: d.location || '',
             assignment: {
               documentId: d.id,
               route: hrSelectedRoute,
@@ -1119,7 +1141,10 @@ export default function App() {
         detalle: d.detalle || [],
         isAdditional: !!(d as any).isAdditional || !!d.assignment?.isAdditional,
         isOrphaned: !!(d as any).isOrphaned || !!d.assignment?.isOrphaned,
-        isMissingFromImport: !!d.isMissingFromImport
+        isMissingFromImport: !!d.isMissingFromImport,
+        trackingStatus: d.trackingStatus || 'EN CURSO',
+        trackingObservation: d.trackingObservation || '',
+        proceso: d.proceso || 'ENTREGA'
       };
       
       return Object.entries(snapItem).reduce((acc, [key, val]) => {
@@ -1192,7 +1217,7 @@ export default function App() {
         routeNumber,
         startTime: currentManifest?.startTime || '',
         endTime: currentManifest?.endTime || '',
-        pendingPoints: 0,
+        pendingPoints: docsSnapshot.filter(s => s.trackingStatus === 'EN CURSO' || !s.trackingStatus).length,
         totalPoints: docsSnapshot.length,
         documentsSnapshot: docsSnapshot,
         updatedAt: serverTimestamp()
@@ -1907,6 +1932,7 @@ export default function App() {
       trackingStatus: 'EN CURSO',
       trackingObservation: newPoint.logisticsNotes.trim() || '',
       logisticsNotes: newPoint.logisticsNotes.trim() || '',
+      location: newPoint.location.trim().toUpperCase() || '',
       orderIndex: existingSnapshot.length + 1,
       isAdditional: true
     };
@@ -1940,6 +1966,7 @@ export default function App() {
         docNumber: '',
         razonSocial: '',
         guideNumber: '',
+        location: '',
         logisticsNotes: ''
       });
       setNewPointAmountStr('');
@@ -3685,7 +3712,7 @@ export default function App() {
                                 />
                              </div>
 
-                             <div className="col-span-1 md:col-span-3 flex flex-col gap-1">
+                             <div className="col-span-1 md:col-span-2 flex flex-col gap-1">
                                 <label className="text-[10px] font-black text-indigo-500 uppercase tracking-wider">Guía Despacho</label>
                                 <input 
                                    type="text"
@@ -3696,7 +3723,7 @@ export default function App() {
                                 />
                              </div>
 
-                             <div className="col-span-1 md:col-span-3 flex flex-col gap-1">
+                             <div className="col-span-1 md:col-span-2 flex flex-col gap-1">
                                 <label className="text-[10px] font-black text-indigo-500 uppercase tracking-wider">Monto Valorizado</label>
                                 <input 
                                    type="text"
@@ -3704,6 +3731,17 @@ export default function App() {
                                    onChange={(e) => setNewPointAmountStr(formatCLP(parseCLP(e.target.value)))}
                                    placeholder="$0"
                                    className="w-full bg-white border border-indigo-200 rounded-lg px-3 py-1.5 text-xs font-mono font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-sm transition-all placeholder:text-slate-300"
+                                />
+                             </div>
+
+                             <div className="col-span-1 md:col-span-2 flex flex-col gap-1">
+                                <label className="text-[10px] font-black text-indigo-500 uppercase tracking-wider">Destino</label>
+                                <input 
+                                   type="text"
+                                   value={newPoint.location}
+                                   onChange={(e) => setNewPoint({...newPoint, location: e.target.value})}
+                                   placeholder="Ubicación/Comuna..."
+                                   className="w-full bg-white border border-indigo-200 rounded-lg px-3 py-1.5 text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-sm transition-all placeholder:text-slate-300"
                                 />
                              </div>
 
@@ -3718,7 +3756,7 @@ export default function App() {
                                 />
                              </div>
 
-                             <div className="col-span-1 md:col-span-2">
+                             <div className="col-span-1 md:col-span-2 flex flex-col justify-end">
                                 <button 
                                    onClick={() => handleAddAdditionalPoint(hrSelectedRoute, hrSelectedDate)}
                                    className="w-full h-9 bg-indigo-600 hover:bg-emerald-600 text-white rounded-lg text-xs font-extrabold uppercase tracking-widest transition-all shadow active:scale-95 cursor-pointer flex items-center justify-center border border-indigo-700"

@@ -95,6 +95,10 @@ export interface MergedDocument extends PendingDocument {
   isOrphaned?: boolean;
   isMissingFromImport?: boolean;
   isAdditional?: boolean;
+  trackingStatus?: 'ENTREGADO' | 'NO ENTREGADO' | 'RETIRADO' | 'NO RETIRADO' | 'EN CURSO';
+  trackingObservation?: string;
+  proceso?: 'ENTREGA' | 'RETIRO';
+  location?: string;
 }
 
 export interface UserProfile {
