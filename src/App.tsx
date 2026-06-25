@@ -993,6 +993,34 @@ export default function App() {
         return;
       }
 
+      // STEP 3.5: CHECK FOR PARTIAL DISPATCH / ADDITIONAL ITEMS
+      // If the document is already in a route and the imported amount is less than the recorded value,
+      // append -1 to its ID so it acts as a new document to be planned.
+      analyzedDocs.forEach(docItem => {
+        const assignment = assignments[docItem.id];
+        if (assignment && assignment.route && assignment.dispatchDate) {
+          const manifestId = `${assignment.route}_${assignment.dispatchDate}`;
+          const manifest = manifests[manifestId];
+          if (manifest && manifest.documentsSnapshot) {
+            const snapDoc = manifest.documentsSnapshot.find(d => d.id === docItem.id);
+            if (snapDoc) {
+              const recordedValue = snapDoc.totalAmount !== undefined ? snapDoc.totalAmount : snapDoc.totalPendiente;
+              if (docItem.totalPendiente < recordedValue) {
+                let newSuffix = 1;
+                let newId = `${docItem.id}-${newSuffix}`;
+                while (analyzedDocs.some(d => d.id === newId) || assignments[newId]) {
+                  newSuffix++;
+                  newId = `${docItem.id}-${newSuffix}`;
+                }
+                
+                docItem.id = newId;
+                docItem.documentNumber = `${docItem.documentNumber}-${newSuffix}`;
+              }
+            }
+          }
+        }
+      });
+
       // STEP 4: SYNCING (Final documents)
       console.log(`Buscando documentos existentes para tipo: ${type}...`);
       const q = query(documentsCol, where("tipo", "==", type));
@@ -1694,6 +1722,17 @@ export default function App() {
 
     try {
       await setDoc(doc(assignmentsCol, docId), cleanedUpdate);
+      
+      if (current.route && current.route !== 'UNASSIGNED' && current.dispatchDate) {
+        const manifestId = `${current.route}_${current.dispatchDate}`;
+        const manifest = manifests[manifestId];
+        if (manifest && manifest.documentsSnapshot && (manifest.isFinalized || manifest.logisticsDataSaved)) {
+           const newSnapshot = manifest.documentsSnapshot.map(d => 
+             d.id === docId ? { ...d, [field]: value } : d
+           );
+           await setDoc(doc(manifestsCol, manifestId), { documentsSnapshot: newSnapshot, updatedAt: serverTimestamp() }, { merge: true });
+        }
+      }
     } catch (error) {
       console.error("Error saving to Firebase:", error);
     }
@@ -2095,6 +2134,7 @@ export default function App() {
             driverMap={driverMap}
             vehicleMap={vehicleMap}
             canEditPoints={activeTab === 'hojaDeRuta'}
+            isAdmin={userProfile?.role === 'ADMIN'}
             onUpdateSnapshot={(snapshot) => {
               const pendingCount = snapshot.filter(d => 
                 d.trackingStatus === 'EN CURSO' || !d.trackingStatus
@@ -3848,8 +3888,8 @@ export default function App() {
                                   <div className="col-span-2">
                                     <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Tipo Despacho</p>
                                     <select 
-                                      disabled={hrIsFinalized}
-                                      className={`w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-[10px] font-bold focus:ring-2 focus:ring-indigo-500/10 focus:outline-none ${hrIsFinalized ? 'opacity-60 cursor-not-allowed bg-slate-100' : 'cursor-pointer'} ${doc.assignment?.deliveryStatus === 'PARCIAL' ? 'text-rose-600' : 'text-emerald-600'}`}
+                                      disabled={hrIsFinalized && userProfile?.role !== 'ADMIN' && userProfile?.role !== 'OPERATOR'}
+                                      className={`w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-[10px] font-bold focus:ring-2 focus:ring-indigo-500/10 focus:outline-none ${hrIsFinalized && userProfile?.role !== 'ADMIN' && userProfile?.role !== 'OPERATOR' ? 'opacity-60 cursor-not-allowed bg-slate-100' : 'cursor-pointer'} ${doc.assignment?.deliveryStatus === 'PARCIAL' ? 'text-rose-600' : 'text-emerald-600'}`}
                                       value={doc.assignment?.deliveryStatus || 'COMPLETO'}
                                       onChange={(e) => handleUpdateAssignment(doc.id, 'deliveryStatus', e.target.value)}
                                     >
@@ -3888,13 +3928,13 @@ export default function App() {
                                 <div className="col-span-2 text-right">
                                   <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Total</p>
                                   <input 
-                                    disabled={hrIsFinalized}
+                                    disabled={hrIsFinalized && userProfile?.role !== 'ADMIN'}
                                     type="text"
-                                    className={`w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-xs font-mono font-bold text-right focus:ring-2 focus:ring-indigo-500/10 focus:outline-none ${hrIsFinalized ? 'opacity-60 cursor-not-allowed bg-slate-100' : ''}`}
+                                    className={`w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-xs font-mono font-bold text-right focus:ring-2 focus:ring-indigo-500/10 focus:outline-none ${hrIsFinalized && userProfile?.role !== 'ADMIN' ? 'opacity-60 cursor-not-allowed bg-slate-100' : ''}`}
                                     value={doc.assignment?.totalAmount !== undefined ? formatCLP(doc.assignment.totalAmount) : formatCLP(doc.totalPendiente)}
                                     onChange={(e) => {
                                       const val = parseCLP(e.target.value);
-                                      const finalVal = val > doc.totalPendiente ? doc.totalPendiente : val;
+                                      const finalVal = Math.max(0, val);
                                       handleUpdateAssignment(doc.id, 'totalAmount', finalVal);
                                     }}
                                   />

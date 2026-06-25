@@ -13,6 +13,7 @@ interface ManifestDetailModalProps {
   vehicleMap: Record<string, string>;
   onUpdateSnapshot?: (updatedSnapshot: any[]) => void;
   canEditPoints?: boolean;
+  isAdmin?: boolean;
 }
 
 export default function ManifestDetailModal({
@@ -24,6 +25,7 @@ export default function ManifestDetailModal({
   vehicleMap,
   onUpdateSnapshot,
   canEditPoints = false,
+  isAdmin = false,
 }: ManifestDetailModalProps) {
   const [localSnapshot, setLocalSnapshot] = useState(manifest?.documentsSnapshot || []);
   const lastLocalSnapshotRef = useRef<any[] | null>(null);
@@ -82,12 +84,34 @@ export default function ManifestDetailModal({
     setLocalSnapshot(updatedSnapshot);
   };
 
+  const handleDeliveryStatusChange = (docId: string, status: string) => {
+    const updatedSnapshot = localSnapshot.map(d => 
+      d.id === docId ? { ...d, deliveryStatus: status as any } : d
+    );
+    lastLocalSnapshotRef.current = updatedSnapshot;
+    setLocalSnapshot(updatedSnapshot);
+    if (onUpdateSnapshot) {
+      onUpdateSnapshot(updatedSnapshot);
+    }
+  };
+
+  const handleTotalAmountChange = (docId: string, amount: number) => {
+    const updatedSnapshot = localSnapshot.map(d => 
+      d.id === docId ? { ...d, totalAmount: amount } : d
+    );
+    lastLocalSnapshotRef.current = updatedSnapshot;
+    setLocalSnapshot(updatedSnapshot);
+  };
+
   const persistObservation = () => {
     if (onUpdateSnapshot) {
       lastLocalSnapshotRef.current = localSnapshot;
       onUpdateSnapshot(localSnapshot);
     }
   };
+
+  const parseCLP = (val: string) => parseInt(val.replace(/[^0-9]/g, '')) || 0;
+  const formatCLP = (val: number) => `$${Math.round(val).toLocaleString('es-CL')}`;
 
   const formatDocId = (tipo: string, id: string) => {
     if (id.startsWith(tipo + '-')) return id;
@@ -194,6 +218,7 @@ export default function ManifestDetailModal({
                 <th className="px-4 py-3">Documento</th>
                 <th className="px-4 py-3">Razón Social</th>
                 <th className="px-4 py-3">Guía</th>
+                <th className="px-4 py-3 min-w-[110px]">Tipo Desp.</th>
                 <th className="px-4 py-3 min-w-[130px]">Status Entrega/Retiro</th>
                 <th className="px-4 py-3">Observaciones Seguimiento</th>
                 <th className="px-4 py-3 text-right">Total</th>
@@ -210,6 +235,20 @@ export default function ManifestDetailModal({
                   <td className={`px-4 py-3 text-[10px] font-normal font-mono ${doc.tipo === 'OC' ? 'text-teal-600' : doc.tipo === 'TR' ? 'text-amber-600' : 'text-indigo-600'}`}>{formatDocId(doc.tipo, doc.id)}</td>
                   <td className="px-4 py-3 font-normal text-slate-700 truncate max-w-[200px]">{doc.razonSocial}</td>
                   <td className="px-4 py-3 text-[10px] font-normal text-slate-600 font-mono">{ (doc.tipo === 'OC' || doc.tipo === 'TR') ? (doc.guideNumber || '-') : doc.guideNumber || '-' }</td>
+                  <td className="px-4 py-3">
+                    {doc.tipo !== 'OC' && (
+                      <select
+                        value={doc.deliveryStatus || 'COMPLETO'}
+                        onChange={(e) => handleDeliveryStatusChange(doc.id, e.target.value)}
+                        className={`text-[9px] font-bold py-1 px-2 rounded-lg border focus:ring-2 focus:ring-opacity-20 transition-all outline-none appearance-none cursor-pointer ${
+                          doc.deliveryStatus === 'PARCIAL' ? 'bg-rose-50 text-rose-700 border-rose-200 focus:ring-rose-500' : 'bg-emerald-50 text-emerald-700 border-emerald-200 focus:ring-emerald-500'
+                        }`}
+                      >
+                        <option value="COMPLETO">COMPLETO</option>
+                        <option value="PARCIAL">PARCIAL</option>
+                      </select>
+                    )}
+                  </td>
                   <td className="px-4 py-3">
                     <div className="flex flex-col gap-1.5 min-w-[150px]">
                       <div className="flex items-center gap-1">
@@ -288,7 +327,28 @@ export default function ManifestDetailModal({
                       />
                     </td>
                   <td className="px-4 py-3 text-right font-normal font-mono text-slate-900">
-                    {doc.tipo === 'OC' ? '$0' : `$${Math.round(doc.totalAmount ?? doc.totalPendiente).toLocaleString('es-CL')}`}
+                    {doc.tipo === 'OC' ? (
+                      '$0'
+                    ) : isAdmin ? (
+                      <input 
+                        type="text"
+                        className={`w-[80px] bg-white border border-slate-200 rounded px-2 py-1 text-xs font-mono font-bold text-right focus:ring-2 focus:ring-indigo-500/20 focus:outline-none transition-all ml-auto`}
+                        value={doc.totalAmount !== undefined ? formatCLP(doc.totalAmount) : formatCLP(doc.totalPendiente)}
+                        onChange={(e) => {
+                          const val = parseCLP(e.target.value);
+                          const finalVal = Math.max(0, val);
+                          handleTotalAmountChange(doc.id, finalVal);
+                        }}
+                        onBlur={() => persistObservation()}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            (e.target as HTMLInputElement).blur();
+                          }
+                        }}
+                      />
+                    ) : (
+                      `$${Math.round(doc.totalAmount ?? doc.totalPendiente).toLocaleString('es-CL')}`
+                    )}
                   </td>
                 </tr>
               ))}
