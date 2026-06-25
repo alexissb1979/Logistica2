@@ -568,7 +568,16 @@ export default function App() {
         .join(' ')
         .toLowerCase();
 
-      const combined = `${rName} ${dName} ${vDesc} ${hrTag} ${guideNumbers}`;
+      const docIds = (m.documentsSnapshot || [])
+        .map(d => {
+          const rawId = (d.id || '').toLowerCase();
+          const cleanId = rawId.replace('-add-', '-');
+          const formatted = `${(d.tipo || '').toLowerCase()}-${cleanId}`;
+          return `${rawId} ${cleanId} ${formatted}`;
+        })
+        .join(' ');
+
+      const combined = `${rName} ${dName} ${vDesc} ${hrTag} ${guideNumbers} ${docIds}`;
       
       const matchesSearch = combined.includes(resumenSearch.toLowerCase());
       const matchesDate = !resumenDate || m.date === resumenDate;
@@ -3952,7 +3961,7 @@ export default function App() {
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
                     <input 
                       type="text" 
-                      placeholder="Identificador, chofer, patente, folio..." 
+                      placeholder="Identificador, chofer, patente, NV, OC, folio..." 
                       className="text-xs pl-9 pr-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 bg-slate-50 w-64 font-medium"
                       value={resumenSearch}
                       onChange={(e) => setResumenSearch(e.target.value)}
@@ -4039,7 +4048,19 @@ export default function App() {
                         const pendingPoints = totalPoints - completedPoints;
                         const totalEstVal = manifest.documentsSnapshot?.reduce((s,d) => d.tipo === 'OC' ? s : s + (d.totalAmount ?? d.totalPendiente), 0) || 0;
                         
+                        const hasMissingFailedReasons = manifest.documentsSnapshot?.some(d => {
+                          const isFailed = d.trackingStatus === 'NO ENTREGADO' || d.trackingStatus === 'NO RETIRADO';
+                          if (!isFailed) return false;
+                          if (!d.failedReason) return true;
+                          
+                          if (d.trackingStatus === 'NO RETIRADO') {
+                            return !['SIN STOCK', 'POR HORARIO', 'DESCORDINACION'].includes(d.failedReason);
+                          } else {
+                            return !['POR HORARIO', 'CLIENTE NO RECIBE', 'NO CARGADO'].includes(d.failedReason);
+                          }
+                        }) ?? false;
                         const isTrackingComplete = totalPoints > 0 && totalPoints === completedPoints;
+                        const isReadyToClose = isTrackingComplete && !hasMissingFailedReasons;
                         const trackingProgress = totalPoints > 0 ? Math.round((completedPoints / totalPoints) * 100) : 0;
 
                         return (
@@ -4178,12 +4199,12 @@ export default function App() {
                               <div className="flex flex-col items-center gap-1 min-w-[80px]">
                                 <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden border border-slate-200">
                                   <div 
-                                    className={`h-full transition-all duration-500 ${isTrackingComplete ? 'bg-emerald-500' : 'bg-indigo-500'}`}
+                                    className={`h-full transition-all duration-500 ${isReadyToClose ? 'bg-emerald-500' : isTrackingComplete ? 'bg-amber-500' : 'bg-indigo-500'}`}
                                     style={{ width: `${trackingProgress}%` }}
                                   />
                                 </div>
-                                <span className={`text-[9px] font-bold ${isTrackingComplete ? 'text-emerald-600' : 'text-slate-500 font-mono italic'}`}>
-                                  {isTrackingComplete ? 'COMPLETO' : `${trackingProgress}%`}
+                                <span className={`text-[9px] font-bold ${isReadyToClose ? 'text-emerald-600' : isTrackingComplete ? 'text-amber-600 animate-pulse' : 'text-slate-500 font-mono italic'}`}>
+                                  {isReadyToClose ? 'COMPLETO' : isTrackingComplete ? 'FALTA MOTIVO' : `${trackingProgress}%`}
                                 </span>
                               </div>
                             </td>
@@ -4207,14 +4228,18 @@ export default function App() {
                                         showToast("Seguimiento Incompleto", "Debe marcar el status de entrega (Entregado o No Entregado) para todos los puntos antes de guardar definitivamente.", 'error');
                                         return;
                                       }
+                                      if (hasMissingFailedReasons) {
+                                        showToast("Motivos de Rechazo Faltantes", "Debe seleccionar un motivo de rechazo válido (como POR HORARIO, CLIENTE NO RECIBE, NO CARGADO, SIN STOCK o DESCORDINACION) para todos los documentos con problemas.", 'error');
+                                        return;
+                                      }
                                       handleUpdateManifestField(mId, 'logisticsDataSaved', true);
                                     }}
                                     className={`p-2 rounded-lg transition-all cursor-pointer ${
-                                      isTrackingComplete 
+                                      isReadyToClose 
                                         ? 'text-slate-400 hover:text-emerald-600 hover:bg-emerald-50' 
                                         : 'text-slate-200 cursor-not-allowed opacity-50'
                                     }`}
-                                    title={isTrackingComplete ? "Guardar y Bloquear Datos" : "Pendiente completar status de entrega"}
+                                    title={isReadyToClose ? "Guardar y Bloquear Datos" : isTrackingComplete ? "Pendiente seleccionar motivo de rechazo" : "Pendiente completar status de entrega"}
                                   >
                                     <Save className="w-4 h-4" />
                                   </button>

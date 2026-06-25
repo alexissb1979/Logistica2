@@ -66,6 +66,7 @@ export interface LogisticsManifest {
     deliveryStatus?: 'COMPLETO' | 'PARCIAL';
     trackingStatus?: 'ENTREGADO' | 'NO ENTREGADO' | 'RETIRADO' | 'NO RETIRADO' | 'EN CURSO';
     trackingObservation?: string;
+    failedReason?: 'POR HORARIO' | 'CLIENTE NO RECIBE' | 'NO CARGADO' | string;
     detalle?: ProductDetail[];
     proceso?: 'ENTREGA' | 'RETIRO';
     location?: string;
@@ -97,6 +98,7 @@ export interface MergedDocument extends PendingDocument {
   isAdditional?: boolean;
   trackingStatus?: 'ENTREGADO' | 'NO ENTREGADO' | 'RETIRADO' | 'NO RETIRADO' | 'EN CURSO';
   trackingObservation?: string;
+  failedReason?: 'POR HORARIO' | 'CLIENTE NO RECIBE' | 'NO CARGADO' | string;
   proceso?: 'ENTREGA' | 'RETIRO';
   location?: string;
 }

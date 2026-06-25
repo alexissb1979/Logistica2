@@ -45,8 +45,27 @@ export default function ManifestDetailModal({
   if (!isOpen || !manifest) return null;
 
   const handleStatusChange = (docId: string, newStatus: string) => {
+    const updatedSnapshot = localSnapshot.map(d => {
+      if (d.id === docId) {
+        const isFailed = newStatus === 'NO ENTREGADO' || newStatus === 'NO RETIRADO';
+        return { 
+          ...d, 
+          trackingStatus: newStatus as any,
+          failedReason: isFailed ? (d.failedReason || '') : undefined
+        };
+      }
+      return d;
+    });
+    lastLocalSnapshotRef.current = updatedSnapshot;
+    setLocalSnapshot(updatedSnapshot);
+    if (onUpdateSnapshot) {
+      onUpdateSnapshot(updatedSnapshot);
+    }
+  };
+
+  const handleFailedReasonChange = (docId: string, newReason: string) => {
     const updatedSnapshot = localSnapshot.map(d => 
-      d.id === docId ? { ...d, trackingStatus: newStatus as any } : d
+      d.id === docId ? { ...d, failedReason: newReason as any } : d
     );
     lastLocalSnapshotRef.current = updatedSnapshot;
     setLocalSnapshot(updatedSnapshot);
@@ -192,42 +211,70 @@ export default function ManifestDetailModal({
                   <td className="px-4 py-3 font-normal text-slate-700 truncate max-w-[200px]">{doc.razonSocial}</td>
                   <td className="px-4 py-3 text-[10px] font-normal text-slate-600 font-mono">{ (doc.tipo === 'OC' || doc.tipo === 'TR') ? (doc.guideNumber || '-') : doc.guideNumber || '-' }</td>
                   <td className="px-4 py-3">
-                    <div className="flex items-center gap-1">
-                      <select
-                        disabled={manifest.logisticsDataSaved}
-                        value={doc.trackingStatus || 'EN CURSO'}
-                        onChange={(e) => handleStatusChange(doc.id, e.target.value)}
-                        className={`text-[9px] font-bold py-1 px-2 rounded-lg border focus:ring-2 focus:ring-opacity-20 transition-all outline-none appearance-none cursor-pointer ${
-                          (doc.trackingStatus === 'ENTREGADO' || doc.trackingStatus === 'RETIRADO')
-                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200 focus:ring-emerald-500' 
-                            : (doc.trackingStatus === 'NO ENTREGADO' || doc.trackingStatus === 'NO RETIRADO')
-                            ? 'bg-rose-50 text-rose-700 border-rose-200 focus:ring-rose-500'
-                            : 'bg-slate-50 text-slate-600 border-slate-200 focus:ring-slate-500'
-                        }`}
-                      >
-                        <option value="EN CURSO">🟡 EN CURSO</option>
-                        {doc.tipo === 'OC' || (doc.tipo === 'TR' && doc.proceso === 'RETIRO') ? (
-                          <>
-                            <option value="RETIRADO">🟢 RETIRADO</option>
-                            <option value="NO RETIRADO">🔴 NO RETIRADO</option>
-                          </>
-                        ) : (
-                          <>
-                            <option value="ENTREGADO">🟢 ENTREGADO</option>
-                            <option value="NO ENTREGADO">🔴 NO ENTREGADO</option>
-                          </>
-                        )}
-                      </select>
-                      
-                      {(doc.trackingStatus === 'ENTREGADO' || doc.trackingStatus === 'RETIRADO') && <CheckCircle2 className="w-3 h-3 text-emerald-500" />}
-                      {(doc.trackingStatus === 'NO ENTREGADO' || doc.trackingStatus === 'NO RETIRADO') && <XCircle className="w-3 h-3 text-rose-500" />}
-                      {(doc.trackingStatus === 'EN CURSO' || !doc.trackingStatus) && <Clock className="w-3 h-3 text-slate-400" />}
+                    <div className="flex flex-col gap-1.5 min-w-[150px]">
+                      <div className="flex items-center gap-1">
+                        <select
+                          disabled={manifest.logisticsDataSaved}
+                          value={doc.trackingStatus || 'EN CURSO'}
+                          onChange={(e) => handleStatusChange(doc.id, e.target.value)}
+                          className={`text-[9px] font-bold py-1 px-2 rounded-lg border focus:ring-2 focus:ring-opacity-20 transition-all outline-none appearance-none cursor-pointer ${
+                            (doc.trackingStatus === 'ENTREGADO' || doc.trackingStatus === 'RETIRADO')
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200 focus:ring-emerald-500' 
+                              : (doc.trackingStatus === 'NO ENTREGADO' || doc.trackingStatus === 'NO RETIRADO')
+                              ? 'bg-rose-50 text-rose-700 border-rose-200 focus:ring-rose-500'
+                              : 'bg-slate-50 text-slate-600 border-slate-200 focus:ring-slate-500'
+                          }`}
+                        >
+                          <option value="EN CURSO">🟡 EN CURSO</option>
+                          {doc.tipo === 'OC' || (doc.tipo === 'TR' && doc.proceso === 'RETIRO') ? (
+                            <>
+                              <option value="RETIRADO">🟢 RETIRADO</option>
+                              <option value="NO RETIRADO">🔴 NO RETIRADO</option>
+                            </>
+                          ) : (
+                            <>
+                              <option value="ENTREGADO">🟢 ENTREGADO</option>
+                              <option value="NO ENTREGADO">🔴 NO ENTREGADO</option>
+                            </>
+                          )}
+                        </select>
+                        
+                        {(doc.trackingStatus === 'ENTREGADO' || doc.trackingStatus === 'RETIRADO') && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />}
+                        {(doc.trackingStatus === 'NO ENTREGADO' || doc.trackingStatus === 'NO RETIRADO') && <XCircle className="w-3.5 h-3.5 text-rose-500 shrink-0" />}
+                        {(doc.trackingStatus === 'EN CURSO' || !doc.trackingStatus) && <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />}
+                      </div>
+
+                      {(doc.trackingStatus === 'NO ENTREGADO' || doc.trackingStatus === 'NO RETIRADO') && (
+                        <select
+                          value={doc.failedReason || ''}
+                          onChange={(e) => handleFailedReasonChange(doc.id, e.target.value)}
+                          className={`text-[9px] font-black py-1 px-2 rounded-lg border focus:ring-2 focus:ring-opacity-20 transition-all outline-none appearance-none cursor-pointer ${
+                            doc.failedReason 
+                              ? 'bg-rose-100 text-rose-900 border-rose-300 focus:ring-rose-500' 
+                              : 'bg-amber-100 text-amber-900 border-amber-300 focus:ring-amber-500 animate-pulse'
+                          }`}
+                        >
+                          <option value="">⚠️ SELECCIONAR MOTIVO...</option>
+                          {doc.trackingStatus === 'NO RETIRADO' ? (
+                            <>
+                              <option value="SIN STOCK">SIN STOCK</option>
+                              <option value="POR HORARIO">POR HORARIO</option>
+                              <option value="DESCORDINACION">DESCORDINACION</option>
+                            </>
+                          ) : (
+                            <>
+                              <option value="POR HORARIO">POR HORARIO</option>
+                              <option value="CLIENTE NO RECIBE">CLIENTE NO RECIBE</option>
+                              <option value="NO CARGADO">NO CARGADO</option>
+                            </>
+                          )}
+                        </select>
+                      )}
                     </div>
                   </td>
                     <td className="px-4 py-3">
                       <input 
                         type="text"
-                        disabled={manifest.logisticsDataSaved}
                         placeholder="Agregar observación..."
                         className="w-full text-[10px] bg-white border border-slate-200 rounded px-2 py-1 focus:ring-1 focus:ring-indigo-500 outline-none text-slate-600 font-normal placeholder:text-slate-300 transition-all"
                         value={doc.trackingObservation || ''}
