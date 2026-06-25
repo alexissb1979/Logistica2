@@ -79,6 +79,7 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
   const [serviceLevelTab, setServiceLevelTab] = useState<'FAILED' | 'ALL'>('FAILED');
   const [serviceLevelSearch, setServiceLevelSearch] = useState<string>('');
   const [zoomedReason, setZoomedReason] = useState<string | null>(null);
+  const [deviationsTypeFilter, setDeviationsTypeFilter] = useState<'ALL' | 'ENTREGA' | 'RETIRO'>('ALL');
 
   // Reset Filters
   const handleResetFilters = () => {
@@ -173,6 +174,8 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
   const metrics = useMemo(() => {
     let rawTotalDocs = 0;
     let deliveredDocs = 0;
+    let entregadosOnlyDocs = 0;
+    let retiradosOnlyDocs = 0;
     let failedDocs = 0;
     let returnedDocs = 0;
     let totalValue = 0;
@@ -190,10 +193,12 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
         const status = d.trackingStatus;
         if (status === 'ENTREGADO' || status === 'COMPLETO') {
           deliveredDocs++;
+          entregadosOnlyDocs++;
         } else if (status === 'NO ENTREGADO') {
           failedDocs++;
         } else if (status === 'RETIRADO') {
-          deliveredDocs++; // Retirado is also a successful action points
+          deliveredDocs++;
+          retiradosOnlyDocs++;
         } else if (status === 'NO RETIRADO') {
           failedDocs++;
         }
@@ -234,6 +239,8 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
       totalRoutes: processedData.length,
       totalDocuments: rawTotalDocs,
       deliveredDocuments: deliveredDocs,
+      entregadosOnlyDocs,
+      retiradosOnlyDocs,
       failedDocuments: failedDocs,
       totalValue,
       totalKilometers,
@@ -334,9 +341,15 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
       'OTRO / SIN ESPECIFICAR': 0
     };
 
+    let filteredFailedCount = 0;
+
     allServiceLevelDocuments.forEach(d => {
       const isFailed = d.trackingStatus === 'NO ENTREGADO' || d.trackingStatus === 'NO RETIRADO';
       if (isFailed) {
+        const typeMatch = deviationsTypeFilter === 'ALL' || d.proceso === deviationsTypeFilter;
+        if (!typeMatch) return;
+
+        filteredFailedCount++;
         const reason = d.failedReason ? d.failedReason.trim().toUpperCase() : '';
         if (reason === 'POR HORARIO') {
           counts['POR HORARIO']++;
@@ -354,11 +367,14 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
       }
     });
 
-    return Object.entries(counts).map(([name, value]) => ({
-      name,
-      value
-    }));
-  }, [allServiceLevelDocuments]);
+    return {
+      data: Object.entries(counts).map(([name, value]) => ({
+        name,
+        value
+      })),
+      totalFiltered: filteredFailedCount
+    };
+  }, [allServiceLevelDocuments, deviationsTypeFilter]);
 
   // Filter service level documents based on tab and search query
   const filteredServiceLevelDocuments = useMemo(() => {
@@ -367,6 +383,10 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
       if (serviceLevelTab === 'FAILED') {
         const isFailed = item.trackingStatus === 'NO ENTREGADO' || item.trackingStatus === 'NO RETIRADO';
         if (!isFailed) return false;
+        
+        if (deviationsTypeFilter !== 'ALL' && item.proceso !== deviationsTypeFilter) {
+          return false;
+        }
       }
 
       // 2. Search filter
@@ -1715,15 +1735,21 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
                 </div>
 
                 {/* KPI Summary Cards inside the Header */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                   <div className="bg-white border border-slate-150 p-3 rounded-2xl text-left">
                     <span className="text-[8px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">Total Documentos</span>
                     <span className="text-base font-black text-slate-800 font-mono">{metrics.totalDocuments}</span>
                   </div>
                   <div className="bg-white border border-slate-150 p-3 rounded-2xl text-left flex items-center justify-between">
                     <div>
-                      <span className="text-[8px] font-bold text-emerald-600 uppercase tracking-wider block mb-0.5">Entregados / Retirados</span>
-                      <span className="text-base font-black text-emerald-600 font-mono">{metrics.deliveredDocuments}</span>
+                      <span className="text-[8px] font-bold text-emerald-600 uppercase tracking-wider block mb-0.5">Entregados</span>
+                      <span className="text-base font-black text-emerald-600 font-mono">{metrics.entregadosOnlyDocs}</span>
+                    </div>
+                  </div>
+                  <div className="bg-white border border-slate-150 p-3 rounded-2xl text-left flex items-center justify-between">
+                    <div>
+                      <span className="text-[8px] font-bold text-emerald-600 uppercase tracking-wider block mb-0.5">Retirados</span>
+                      <span className="text-base font-black text-emerald-600 font-mono">{metrics.retiradosOnlyDocs}</span>
                     </div>
                     <span className="text-[10px] bg-emerald-50 text-emerald-700 font-extrabold px-1.5 py-0.5 rounded-lg">
                       {metrics.successRate}%
@@ -1802,27 +1828,50 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
               <div className="flex-1 min-h-0 overflow-y-auto p-6 space-y-6 text-left custom-scrollbar">
                 
                 {/* Visual Chart Panel: Motivos de Despacho No Exitosos */}
+                <div className="flex flex-wrap items-center justify-between mb-4">
+                  <div className="flex bg-slate-100 p-1 rounded-xl">
+                    <button
+                      onClick={() => setDeviationsTypeFilter('ALL')}
+                      className={`px-3 py-1.5 text-[10px] font-black rounded-lg transition-all ${deviationsTypeFilter === 'ALL' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                    >
+                      Ambos
+                    </button>
+                    <button
+                      onClick={() => setDeviationsTypeFilter('ENTREGA')}
+                      className={`px-3 py-1.5 text-[10px] font-black rounded-lg transition-all ${deviationsTypeFilter === 'ENTREGA' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                    >
+                      Entregas
+                    </button>
+                    <button
+                      onClick={() => setDeviationsTypeFilter('RETIRO')}
+                      className={`px-3 py-1.5 text-[10px] font-black rounded-lg transition-all ${deviationsTypeFilter === 'RETIRO' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                    >
+                      Retiros
+                    </button>
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                   {/* Left Column: Reasons Bar Chart */}
                   <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex flex-col h-[200px] justify-between">
                     <div className="text-left">
                       <span className="text-[9px] font-extrabold uppercase text-rose-600 tracking-wider block mb-0.5">Distribución de Rechazos</span>
                       <h4 className="text-xs font-black text-slate-800 uppercase tracking-tight flex items-center gap-1.5 leading-none">
-                        <AlertTriangle className="w-3.5 h-3.5 text-rose-500" /> Entregas No Exitosas por Motivo
+                        <AlertTriangle className="w-3.5 h-3.5 text-rose-500" /> Desviaciones por Motivo
                       </h4>
                       <p className="text-[9px] text-slate-400 font-medium mt-0.5">Métrica acumulada de motivos de rechazo.</p>
                     </div>
 
                     <div className="flex-1 min-h-[110px] mt-2 relative">
-                      {metrics.failedDocuments === 0 ? (
+                      {failedReasonsChartData.totalFiltered === 0 ? (
                         <div className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-slate-400 italic">
-                          No hay entregas fallidas registradas
+                          No hay desviaciones registradas
                         </div>
                       ) : (
                         <ResponsiveContainer width="100%" height="100%">
                           <BarChart
                             layout="vertical"
-                            data={failedReasonsChartData}
+                            data={failedReasonsChartData.data}
                             margin={{ top: 5, right: 30, left: 10, bottom: 5 }}
                           >
                             <XAxis type="number" hide />
@@ -1851,7 +1900,7 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
                               barSize={12}
                               label={{ position: 'right', fill: '#1e293b', fontSize: 9, fontWeight: 'black' }}
                             >
-                              {failedReasonsChartData.map((entry, idx) => {
+                              {failedReasonsChartData.data.map((entry, idx) => {
                                 let color = '#94a3b8'; // grey
                                 if (entry.name === 'POR HORARIO') color = '#f59e0b'; // amber
                                 if (entry.name === 'CLIENTE NO RECIBE') color = '#f43f5e'; // rose
@@ -1875,15 +1924,15 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
                         <h4 className="text-xs font-black text-slate-800 uppercase tracking-tight">Motivos de Desviación / Rechazo</h4>
                       </div>
                       <span className="text-[9px] bg-indigo-50 text-indigo-700 font-extrabold px-1.5 py-0.5 rounded-lg">
-                        Total Fallidos: {metrics.failedDocuments}
+                        Total Filtrados: {failedReasonsChartData.totalFiltered}
                       </span>
                     </div>
 
                     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 mt-1 text-left">
-                      {failedReasonsChartData.map((entry) => {
+                      {failedReasonsChartData.data.map((entry) => {
                         let colorClass = 'bg-slate-100/50 text-slate-800 border-slate-200';
                         let textColorClass = 'text-slate-500';
-                        let percentage = metrics.failedDocuments > 0 ? Math.round((entry.value / metrics.failedDocuments) * 100) : 0;
+                        let percentage = failedReasonsChartData.totalFiltered > 0 ? Math.round((entry.value / failedReasonsChartData.totalFiltered) * 100) : 0;
                         
                         if (entry.name === 'POR HORARIO') {
                           colorClass = 'bg-amber-50/50 text-amber-900 border-amber-200';
