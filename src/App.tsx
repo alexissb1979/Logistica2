@@ -3,7 +3,7 @@ import {
   Upload, FileText, Search, Save, Calendar as CalendarIcon, MapPin, 
   Info, Trash2, Edit2, Truck, User, List, ArrowUp, ArrowDown, 
   ClipboardList, Printer, AlertCircle, AlertTriangle, RotateCcw, Lock, LogOut, Users, Shield, Loader, X, Plus, BarChart3,
-  ExternalLink, Menu
+  ExternalLink, Menu, ChevronDown, ChevronUp
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import Calendar from 'react-calendar';
@@ -83,6 +83,8 @@ export default function App() {
   const [userManagerOpen, setUserManagerOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+  const [hrFiltersCollapsed, setHrFiltersCollapsed] = useState(true);
+  const [expandedHrDocId, setExpandedHrDocId] = useState<string | null>(null);
 
   const [activeTab, setActiveTab] = useState<'dashboard' | 'hojaDeRuta' | 'resumenRutas' | 'kpis' | 'solicitudes'>('dashboard');
   const [isOnline, setIsOnline] = useState(navigator.onLine);
@@ -3586,7 +3588,7 @@ export default function App() {
         {/* Generate Manifest sheet tab */}
         {activeTab === 'hojaDeRuta' && (
           <div className="flex-1 flex flex-col overflow-hidden bg-slate-50 animate-fade-in" id="hoja-de-ruta-panel">
-            <div className="p-4 sm:p-6 bg-white border-b border-slate-200 shadow-sm flex flex-col gap-4 sm:gap-6">
+            <div className="p-4 sm:p-6 bg-white border-b border-slate-200 shadow-sm flex flex-col gap-3 sm:gap-4">
               <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                   <div className="flex items-center gap-4">
                     <div>
@@ -3596,7 +3598,32 @@ export default function App() {
                       <p className="text-[10px] sm:text-xs text-slate-500">Configura el orden y detalles para el transportista</p>
                     </div>
                   </div>
-                
+              </div>
+
+              {/* Mobile Summary & Collapse Toggle Bar */}
+              <div className="md:hidden flex items-center justify-between bg-indigo-50/70 border border-indigo-100 rounded-xl p-3.5 shadow-sm">
+                <div className="flex flex-col text-left gap-1">
+                  <span className="text-[9px] font-bold text-indigo-500 uppercase tracking-widest">Configuración de Ruta</span>
+                  <span className="text-xs font-black text-slate-850">
+                    {routes.find(r => r.id === hrSelectedRoute)?.name || 'Sin Seleccionar'} • {hrSelectedDate ? new Date(hrSelectedDate + 'T12:00:00').toLocaleDateString('es-CL') : '-'}
+                  </span>
+                  <div className="flex items-center gap-2 text-[10px] text-slate-500 font-medium mt-0.5">
+                    <span>{hojaDeRutaDocs.length} Puntos</span>
+                    <span className="w-1 h-1 rounded-full bg-slate-300"></span>
+                    <span className="font-semibold text-slate-700">${Math.round(hojaDeRutaDocs.reduce((s,d) => d.tipo === 'OC' ? s : s + d.totalPendiente, 0)).toLocaleString('es-CL')}</span>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setHrFiltersCollapsed(!hrFiltersCollapsed)}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-indigo-600 text-white font-extrabold text-[10px] uppercase rounded-lg shadow-md active:scale-95 transition-all cursor-pointer shrink-0"
+                >
+                  <span>{hrFiltersCollapsed ? 'Configurar' : 'Ocultar'}</span>
+                  {hrFiltersCollapsed ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
+                </button>
+              </div>
+
+              {/* Collapsible filters and controls block */}
+              <div className={`flex-col gap-4 sm:gap-6 ${hrFiltersCollapsed ? 'hidden md:flex' : 'flex'}`}>
                 <div className="flex flex-col gap-3">
                   <div className="flex flex-col gap-1.5">
                     <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Rutas Disponibles</label>
@@ -3692,7 +3719,6 @@ export default function App() {
                     </div>
                   </div>
                 </div>
-              </div>
 
               {(() => {
                 const hrManifestId = `${hrSelectedRoute}_${hrSelectedDate}`;
@@ -3781,6 +3807,7 @@ export default function App() {
                   </div>
                 );
               })()}
+              </div>
             </div>
 
             <div className="flex-1 overflow-auto p-6" id="hoja-de-ruta-items">
@@ -3945,7 +3972,7 @@ export default function App() {
                               onDragOver={(e) => handleDragOver(e, idx)}
                               onDragEnd={handleDragEnd}
                               onDrop={(e) => handleDrop(e, idx)}
-                              className={`border rounded-xl p-4 shadow-sm transition-all duration-200 flex items-center gap-6 select-none ${
+                              className={`border rounded-xl p-3 sm:p-4 shadow-sm transition-all duration-200 flex flex-col md:flex-row md:items-center gap-3 sm:gap-4 md:gap-6 select-none ${
                                 isDragging 
                                   ? 'opacity-30 border-dashed border-indigo-400 scale-[0.98]' 
                                   : isDragOver
@@ -3957,23 +3984,31 @@ export default function App() {
                                         : 'bg-white border-slate-200 hover:shadow-md hover:bg-slate-50/30'
                               } ${!hrIsFinalized ? 'cursor-grab active:cursor-grabbing' : ''}`}
                             >
-                            <div className={`flex flex-col items-center gap-1 shrink-0 p-2 rounded-lg border ${doc.isMissingFromImport ? 'bg-rose-100 border-rose-200' : doc.tipo === 'OC' ? 'bg-teal-50/50 border-teal-100' : 'bg-slate-50 border-slate-100'}`}>
-                              <button 
-                                onClick={() => handleMoveOrder(doc.id, 'up')}
-                                disabled={idx === 0 || hrIsFinalized}
-                                className={`p-1 hover:bg-white rounded text-slate-400 hover:text-indigo-600 disabled:opacity-20 cursor-pointer ${hrIsFinalized ? 'cursor-not-allowed' : ''}`}
-                              ><ArrowUp className="w-4 h-4" /></button>
-                              <span className={`text-xs font-black ${doc.isMissingFromImport ? 'text-rose-800' : 'text-slate-800'}`}>{idx + 1}</span>
-                              <button 
-                                onClick={() => handleMoveOrder(doc.id, 'down')}
-                                disabled={idx === hojaDeRutaDocs.length - 1 || hrIsFinalized}
-                                className={`p-1 hover:bg-white rounded text-slate-400 hover:text-indigo-600 disabled:opacity-20 cursor-pointer ${hrIsFinalized ? 'cursor-not-allowed' : ''}`}
-                              ><ArrowDown className="w-4 h-4" /></button>
+                            {/* Reorder and Rank Indicator */}
+                            <div className={`flex flex-row md:flex-col items-center gap-2 md:gap-1 shrink-0 p-2 rounded-lg border justify-between md:justify-center ${doc.isMissingFromImport ? 'bg-rose-100 border-rose-200 w-full md:w-auto' : doc.tipo === 'OC' ? 'bg-teal-50/50 border-teal-100 w-full md:w-auto' : 'bg-slate-50 border-slate-100 w-full md:w-auto'}`}>
+                              <div className="flex items-center gap-2 md:flex-col">
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider md:hidden">Paso</span>
+                                <span className={`text-xs font-black ${doc.isMissingFromImport ? 'text-rose-800' : 'text-slate-800'}`}>{idx + 1}</span>
+                              </div>
+                              <span className={`text-[10px] font-mono font-extrabold md:hidden ${doc.isMissingFromImport ? 'text-rose-600' : doc.tipo === 'OC' ? 'text-teal-600' : 'text-indigo-500'}`}>{formatDocId(doc.tipo, doc.id)}</span>
+                              <div className="flex items-center gap-1.5 md:flex-col">
+                                <button 
+                                  onClick={() => handleMoveOrder(doc.id, 'up')}
+                                  disabled={idx === 0 || hrIsFinalized}
+                                  className={`p-1 hover:bg-white rounded text-slate-400 hover:text-indigo-600 disabled:opacity-20 cursor-pointer ${hrIsFinalized ? 'cursor-not-allowed' : ''}`}
+                                ><ArrowUp className="w-4 h-4" /></button>
+                                <button 
+                                  onClick={() => handleMoveOrder(doc.id, 'down')}
+                                  disabled={idx === hojaDeRutaDocs.length - 1 || hrIsFinalized}
+                                  className={`p-1 hover:bg-white rounded text-slate-400 hover:text-indigo-600 disabled:opacity-20 cursor-pointer ${hrIsFinalized ? 'cursor-not-allowed' : ''}`}
+                                ><ArrowDown className="w-4 h-4" /></button>
+                              </div>
                             </div>
 
-                            <div className="flex-1 flex flex-col md:grid md:grid-cols-12 gap-3 md:gap-4 md:items-center">
+                            {/* Desktop Layout - visible only on md screens and larger */}
+                            <div className="hidden md:grid md:grid-cols-12 gap-4 items-center flex-1">
                               <div className={`md:${doc.tipo === 'OC' ? "col-span-3" : "col-span-2"}`}>
-                                <p className="text-[10px] font-bold text-slate-400 uppercase mb-0.5 md:mb-1">Cliente</p>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Cliente</p>
                                 <div className="flex items-center gap-2">
                                   <p className="text-xs font-bold text-slate-800 truncate">{doc.razonSocial}</p>
                                   {(doc.isOrphaned || doc.isAdditional) && (
@@ -3990,23 +4025,22 @@ export default function App() {
                                 <>
                                   <div className="md:col-span-2 grid grid-cols-2 md:grid-cols-1 gap-2 md:gap-0">
                                     <div className="flex flex-col">
-                                      <p className="text-[10px] font-bold text-slate-400 uppercase mb-0.5 md:mb-1">Guía Despacho</p>
+                                      <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Guía Despacho</p>
                                       <input 
                                         disabled={hrIsFinalized}
                                         type="text" 
                                         placeholder="N° Guía..."
-                                        className={`w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 md:py-1.5 text-xs font-bold focus:ring-2 focus:ring-indigo-500/10 focus:outline-none ${hrIsFinalized ? 'opacity-60 cursor-not-allowed bg-slate-100' : ''}`}
+                                        className={`w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-bold focus:ring-2 focus:ring-indigo-500/10 focus:outline-none ${hrIsFinalized ? 'opacity-60 cursor-not-allowed bg-slate-100' : ''}`}
                                         value={doc.assignment?.guideNumber || ''}
                                         onChange={(e) => handleUpdateAssignment(doc.id, 'guideNumber', e.target.value)}
                                       />
                                     </div>
 
                                     <div className="flex flex-col">
-                                      <p className="text-[10px] font-bold text-slate-400 uppercase mb-0.5 md:mb-1 md:mt-2 hidden md:block">Tipo Despacho</p>
-                                      <p className="text-[10px] font-bold text-slate-400 uppercase mb-0.5 md:mb-1 md:hidden">Tipo</p>
+                                      <p className="text-[10px] font-bold text-slate-400 uppercase mb-1 mt-2">Tipo Despacho</p>
                                       <select 
                                         disabled={hrIsFinalized && userProfile?.role !== 'ADMIN' && userProfile?.role !== 'OPERATOR'}
-                                        className={`w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-2 md:py-1.5 text-xs md:text-[10px] font-bold focus:ring-2 focus:ring-indigo-500/10 focus:outline-none ${hrIsFinalized && userProfile?.role !== 'ADMIN' && userProfile?.role !== 'OPERATOR' ? 'opacity-60 cursor-not-allowed bg-slate-100' : 'cursor-pointer'} ${doc.assignment?.deliveryStatus === 'PARCIAL' ? 'text-rose-600' : 'text-emerald-600'}`}
+                                        className={`w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold focus:ring-2 focus:ring-indigo-500/10 focus:outline-none ${hrIsFinalized && userProfile?.role !== 'ADMIN' && userProfile?.role !== 'OPERATOR' ? 'opacity-60 cursor-not-allowed bg-slate-100' : 'cursor-pointer'} ${doc.assignment?.deliveryStatus === 'PARCIAL' ? 'text-rose-600' : 'text-emerald-600'}`}
                                         value={doc.assignment?.deliveryStatus || 'COMPLETO'}
                                         onChange={(e) => handleUpdateAssignment(doc.id, 'deliveryStatus', e.target.value)}
                                       >
@@ -4020,12 +4054,12 @@ export default function App() {
 
                               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-1 md:col-span-2 gap-2 md:gap-0">
                                 <div className="flex flex-col">
-                                  <p className="text-[10px] font-bold text-slate-400 uppercase mb-0.5 md:mb-1">Ubicación</p>
+                                  <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Ubicación</p>
                                   <input 
                                     disabled={hrIsFinalized}
                                     type="text" 
                                     placeholder="Ubicación..."
-                                    className={`w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 md:py-1.5 text-xs font-bold focus:ring-2 focus:ring-indigo-500/10 focus:outline-none ${hrIsFinalized ? 'opacity-60 cursor-not-allowed bg-slate-100' : ''}`}
+                                    className={`w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-bold focus:ring-2 focus:ring-indigo-500/10 focus:outline-none ${hrIsFinalized ? 'opacity-60 cursor-not-allowed bg-slate-100' : ''}`}
                                     value={doc.assignment?.location || ''}
                                     onChange={(e) => handleUpdateAssignment(doc.id, 'location', e.target.value)}
                                   />
@@ -4033,24 +4067,24 @@ export default function App() {
                               </div>
 
                               <div className={`md:${doc.tipo === 'OC' ? "col-span-7" : "col-span-2"}`}>
-                                <p className="text-[10px] font-bold text-slate-400 uppercase mb-0.5 md:mb-1">Obs. Logísticas / Despacho</p>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Obs. Logísticas / Despacho</p>
                                 <input 
                                   disabled={hrIsFinalized}
                                   type="text" 
                                   placeholder="Notas para el conductor..."
-                                  className={`w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 md:py-1.5 text-xs font-medium focus:ring-2 focus:ring-indigo-500/10 focus:outline-none ${hrIsFinalized ? 'opacity-60 cursor-not-allowed bg-slate-100' : ''}`}
+                                  className={`w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-medium focus:ring-2 focus:ring-indigo-500/10 focus:outline-none ${hrIsFinalized ? 'opacity-60 cursor-not-allowed bg-slate-100' : ''}`}
                                   value={doc.assignment?.logisticsNotes || ''}
                                   onChange={(e) => handleUpdateAssignment(doc.id, 'logisticsNotes', e.target.value)}
                                 />
                               </div>
 
                               {doc.tipo !== 'OC' && (
-                                <div className="md:col-span-2 text-left md:text-right">
-                                  <p className="text-[10px] font-bold text-slate-400 uppercase mb-0.5 md:mb-1">Total</p>
+                                <div className="md:col-span-2 text-right">
+                                  <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Total</p>
                                   <input 
                                     disabled={hrIsFinalized && userProfile?.role !== 'ADMIN'}
                                     type="text"
-                                    className={`w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 md:py-1 text-xs font-mono font-bold text-left md:text-right focus:ring-2 focus:ring-indigo-500/10 focus:outline-none ${hrIsFinalized && userProfile?.role !== 'ADMIN' ? 'opacity-60 cursor-not-allowed bg-slate-100' : ''}`}
+                                    className={`w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-mono font-bold text-right focus:ring-2 focus:ring-indigo-500/10 focus:outline-none ${hrIsFinalized && userProfile?.role !== 'ADMIN' ? 'opacity-60 cursor-not-allowed bg-slate-100' : ''}`}
                                     value={doc.assignment?.totalAmount !== undefined ? formatCLP(doc.assignment.totalAmount) : formatCLP(doc.totalPendiente)}
                                     onChange={(e) => {
                                       const val = parseCLP(e.target.value);
@@ -4058,6 +4092,178 @@ export default function App() {
                                       handleUpdateAssignment(doc.id, 'totalAmount', finalVal);
                                     }}
                                   />
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Mobile Layout - compact high-readability accordion list */}
+                            <div className="flex md:hidden flex-col gap-2 flex-1 text-slate-800">
+                              {expandedHrDocId !== doc.id ? (
+                                <div 
+                                  onClick={() => !hrIsFinalized && setExpandedHrDocId(doc.id)}
+                                  className="flex flex-col gap-2 cursor-pointer"
+                                >
+                                  {/* Line 1: Client Name & Type badge */}
+                                  <div className="flex items-start justify-between gap-2">
+                                    <div className="flex flex-col">
+                                      <p className="text-xs font-black text-slate-900 leading-tight">{doc.razonSocial}</p>
+                                      <span className="text-[10px] font-semibold text-slate-400 mt-0.5">
+                                        ID: <span className="font-extrabold text-indigo-600">{formatDocId(doc.tipo, doc.id)}</span>
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center gap-1 shrink-0">
+                                      {doc.assignment?.deliveryStatus === 'PARCIAL' && (
+                                        <span className="bg-rose-100 text-rose-700 text-[8px] font-black px-1.5 py-0.5 rounded uppercase">Parcial</span>
+                                      )}
+                                      {(doc.isOrphaned || doc.isAdditional) && (
+                                        <span className="bg-amber-100 text-amber-700 text-[8px] font-black px-1.5 py-0.5 rounded uppercase">Adicional</span>
+                                      )}
+                                      {doc.isMissingFromImport && (
+                                        <span className="bg-rose-600 text-white text-[8px] font-black px-1.5 py-0.5 rounded uppercase animate-pulse">Revisar</span>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  {/* Line 2: Condensed details in two high-readability rows */}
+                                  <div className="bg-slate-50 border border-slate-100 rounded-xl p-2.5 flex flex-col gap-2">
+                                    <div className="flex justify-between items-center text-[11px] text-slate-600 font-medium">
+                                      <span>Guía: <span className="font-black text-slate-800">{doc.assignment?.guideNumber || 'Sin guía'}</span></span>
+                                      {doc.tipo !== 'OC' && (
+                                        <span>Total: <span className="font-mono font-black text-indigo-600">${(doc.assignment?.totalAmount !== undefined ? doc.assignment.totalAmount : doc.totalPendiente).toLocaleString('es-CL')}</span></span>
+                                      )}
+                                    </div>
+                                    <div className="h-px bg-slate-100"></div>
+                                    <div className="flex flex-col gap-1 text-[11px] text-slate-500">
+                                      <div className="flex items-center gap-1.5">
+                                        <MapPin className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                                        <span className="truncate">Destino: <span className="font-bold text-slate-700">{doc.assignment?.location || 'No especificada'}</span></span>
+                                      </div>
+                                      <div className="flex items-start gap-1.5 mt-0.5">
+                                        <Info className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
+                                        <span className="line-clamp-2">Obs: <span className="font-medium text-slate-600 italic">"{doc.assignment?.logisticsNotes || 'Sin notas de despacho'}"</span></span>
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* Tap to edit cue */}
+                                  {!hrIsFinalized && (
+                                    <div className="flex justify-end items-center gap-1 mt-0.5">
+                                      <Edit2 className="w-2.5 h-2.5 text-indigo-600" />
+                                      <span className="text-[9px] font-black text-indigo-600 uppercase tracking-widest">Toque para editar datos</span>
+                                    </div>
+                                  )}
+                                </div>
+                              ) : (
+                                /* Strategic Form - Positioned strategically at top for keyboard */
+                                <div className="bg-white border-2 border-indigo-200 rounded-2xl p-3 flex flex-col gap-3 shadow-md animate-in fade-in slide-in-from-top-2">
+                                  <div className="flex items-center justify-between border-b border-indigo-100 pb-2">
+                                    <div className="flex flex-col">
+                                      <span className="text-[9px] font-black text-indigo-600 uppercase tracking-wider">Edición de Despacho</span>
+                                      <span className="text-xs font-black text-slate-800 truncate max-w-[180px]">{doc.razonSocial}</span>
+                                    </div>
+                                    <button 
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setExpandedHrDocId(null);
+                                      }}
+                                      className="px-2.5 py-1 bg-indigo-600 text-white text-[10px] font-black uppercase tracking-wider rounded-lg shadow-sm active:scale-95 transition-all cursor-pointer"
+                                    >
+                                      Listo
+                                    </button>
+                                  </div>
+
+                                  <div className="flex flex-col gap-2">
+                                    {doc.tipo !== 'OC' && (
+                                      <div className="grid grid-cols-2 gap-2">
+                                        <div className="flex flex-col gap-1">
+                                          <label className="text-[9px] font-black text-slate-500 uppercase">N° Guía</label>
+                                          <input 
+                                            type="text" 
+                                            placeholder="Ingresa guía..."
+                                            className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold focus:bg-white focus:border-indigo-500 focus:outline-none"
+                                            value={doc.assignment?.guideNumber || ''}
+                                            onChange={(e) => handleUpdateAssignment(doc.id, 'guideNumber', e.target.value)}
+                                          />
+                                        </div>
+                                        <div className="flex flex-col gap-1">
+                                          <label className="text-[9px] font-black text-slate-500 uppercase">Estado Despacho</label>
+                                          <select 
+                                            disabled={userProfile?.role !== 'ADMIN' && userProfile?.role !== 'OPERATOR'}
+                                            className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold focus:bg-white focus:border-indigo-500 focus:outline-none cursor-pointer"
+                                            value={doc.assignment?.deliveryStatus || 'COMPLETO'}
+                                            onChange={(e) => handleUpdateAssignment(doc.id, 'deliveryStatus', e.target.value)}
+                                          >
+                                            <option value="COMPLETO">COMPLETO</option>
+                                            <option value="PARCIAL">PARCIAL</option>
+                                          </select>
+                                        </div>
+                                      </div>
+                                    )}
+
+                                    <div className="flex flex-col gap-1">
+                                      <label className="text-[9px] font-black text-slate-500 uppercase">Ubicación / Comuna</label>
+                                      <input 
+                                        type="text" 
+                                        placeholder="Comuna o destino..."
+                                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold focus:bg-white focus:border-indigo-500 focus:outline-none"
+                                        value={doc.assignment?.location || ''}
+                                        onChange={(e) => handleUpdateAssignment(doc.id, 'location', e.target.value)}
+                                      />
+                                    </div>
+
+                                    <div className="flex flex-col gap-1">
+                                      <label className="text-[9px] font-black text-slate-500 uppercase">Obs. Logísticas</label>
+                                      <input 
+                                        type="text" 
+                                        placeholder="Notas de despacho..."
+                                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-semibold focus:bg-white focus:border-indigo-500 focus:outline-none"
+                                        value={doc.assignment?.logisticsNotes || ''}
+                                        onChange={(e) => handleUpdateAssignment(doc.id, 'logisticsNotes', e.target.value)}
+                                      />
+                                    </div>
+
+                                    {doc.tipo !== 'OC' && (
+                                      <div className="flex flex-col gap-1">
+                                        <label className="text-[9px] font-black text-slate-500 uppercase">Total Valorizado ($)</label>
+                                        <input 
+                                          disabled={userProfile?.role !== 'ADMIN'}
+                                          type="text"
+                                          className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-mono font-bold focus:bg-white focus:border-indigo-500 focus:outline-none"
+                                          value={doc.assignment?.totalAmount !== undefined ? formatCLP(doc.assignment.totalAmount) : formatCLP(doc.totalPendiente)}
+                                          onChange={(e) => {
+                                            const val = parseCLP(e.target.value);
+                                            const finalVal = Math.max(0, val);
+                                            handleUpdateAssignment(doc.id, 'totalAmount', finalVal);
+                                          }}
+                                        />
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  <div className="flex items-center gap-2 mt-1">
+                                    <button 
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setExpandedHrDocId(null);
+                                      }}
+                                      className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-[10px] uppercase tracking-widest rounded-lg shadow-sm active:scale-95 transition-all cursor-pointer flex items-center justify-center gap-1 border border-indigo-700"
+                                    >
+                                      <Save className="w-3 h-3" />
+                                      <span>Guardar Cambios</span>
+                                    </button>
+                                    <button 
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setExpandedHrDocId(null);
+                                      }}
+                                      className="py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-500 font-extrabold text-[10px] uppercase tracking-wider rounded-lg active:scale-95 transition-all cursor-pointer"
+                                    >
+                                      Cerrar
+                                    </button>
+                                  </div>
                                 </div>
                               )}
                             </div>
