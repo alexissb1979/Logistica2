@@ -82,6 +82,7 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState(true);
   const [userManagerOpen, setUserManagerOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
 
   const [activeTab, setActiveTab] = useState<'dashboard' | 'hojaDeRuta' | 'resumenRutas' | 'kpis' | 'solicitudes'>('dashboard');
   const [isOnline, setIsOnline] = useState(navigator.onLine);
@@ -3094,7 +3095,14 @@ export default function App() {
         {activeTab === 'dashboard' && (
           <>
             {/* Left Sidebar Filters */}
-            <aside className="w-64 bg-white border-r border-slate-200 p-5 flex flex-col gap-8 shrink-0 overflow-y-auto">
+            <aside className={`bg-white md:border-r border-slate-200 p-5 flex flex-col gap-6 md:gap-8 shrink-0 overflow-y-auto ${mobileFiltersOpen ? 'fixed inset-0 z-[60] w-full' : 'hidden md:flex md:w-64'}`}>
+              <div className="flex items-center justify-between md:hidden mb-2">
+                <h2 className="text-lg font-bold text-slate-800">Filtros</h2>
+                <button onClick={() => setMobileFiltersOpen(false)} className="p-2 -mr-2 text-slate-500 hover:bg-slate-100 rounded-lg cursor-pointer">
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+
               <div className="flex flex-col gap-1 mb-2">
                 <h2 className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-3">Rutas Logísticas</h2>
                 <div className="flex flex-col gap-1 max-h-[300px] overflow-y-auto pr-1">
@@ -3194,30 +3202,38 @@ export default function App() {
 
             {/* Main view center */}
             <main className="flex-1 flex flex-col bg-white overflow-hidden shadow-inner">
-              <div className="h-14 border-b border-slate-100 flex items-center justify-between px-6 bg-white shrink-0">
-                <div className="flex gap-4 items-center flex-1">
-                  <span className="text-xs text-slate-500">
-                    Mostrando: <span className="text-slate-900">{filteredDocuments.length} pendientes</span>
-                  </span>
-                  <div className="h-4 w-px bg-slate-200"></div>
-                  <div className="relative flex-1 max-w-sm">
+              <div className="border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between p-4 md:px-6 md:h-14 bg-white shrink-0 gap-3 md:gap-0">
+                <div className="flex flex-col md:flex-row md:gap-4 md:items-center flex-1 w-full">
+                  <div className="flex items-center justify-between mb-3 md:mb-0">
+                    <span className="text-xs text-slate-500">
+                      Mostrando: <span className="text-slate-900">{filteredDocuments.length} pendientes</span>
+                    </span>
+                    <button 
+                      onClick={() => setMobileFiltersOpen(true)}
+                      className="md:hidden flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 rounded-lg text-xs font-bold text-slate-700"
+                    >
+                      <Search className="w-3.5 h-3.5" /> Filtros
+                    </button>
+                  </div>
+                  <div className="hidden md:block h-4 w-px bg-slate-200"></div>
+                  <div className="relative flex-1 max-w-sm w-full">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
                     <input 
                       type="text" 
                       placeholder="Folio, razón social o vendedor..." 
-                      className="w-full text-xs pl-9 pr-4 py-1.5 border border-slate-200 rounded-full focus:outline-none focus:ring-2 focus:ring-indigo-500/20 bg-slate-50/50 font-sans"
+                      className="w-full text-xs pl-9 pr-4 py-2 md:py-1.5 border border-slate-200 rounded-full focus:outline-none focus:ring-2 focus:ring-indigo-500/20 bg-slate-50/50 font-sans"
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
                     />
                   </div>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 w-full md:w-auto">
                   <button 
                     onClick={() => {
                       setPickingRouteId('UNASSIGNED');
                       setIsPickingModalOpen(true);
                     }}
-                    className="flex items-center gap-2 px-4 py-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-lg text-xs font-semibold transition-all shadow-sm active:scale-95 cursor-pointer font-sans"
+                    className="flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 md:py-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-lg text-xs font-semibold transition-all shadow-sm active:scale-95 cursor-pointer font-sans"
                   >
                     <Printer className="w-3.5 h-3.5 text-indigo-500" />
                     <span>Reporte para Picking</span>
@@ -3228,7 +3244,7 @@ export default function App() {
               {/* Grid database viewer */}
               <div className="flex-1 overflow-auto">
                 <table className="w-full text-left border-collapse min-w-[900px]">
-                  <thead className="sticky top-0 bg-slate-50/90 backdrop-blur-sm text-[10px] text-slate-500 uppercase tracking-widest border-b border-slate-200 z-[5]">
+                  <thead className="sticky top-0 bg-slate-50/90 backdrop-blur-sm text-[10px] text-slate-500 uppercase tracking-widest border-b border-slate-200 z-[5] hidden md:table-header-group">
                     <tr>
                       <th className="py-3 px-6 font-normal">Folio / Tipo</th>
                       <th className="py-3 px-6 font-normal">Fecha Doc</th>
@@ -3241,7 +3257,7 @@ export default function App() {
                       <th className="py-3 px-6 font-normal">Acción</th>
                     </tr>
                   </thead>
-                  <tbody className="text-xs divide-y divide-slate-50">
+                  <tbody className="text-xs divide-y divide-slate-50 md:divide-slate-100 flex flex-col md:table-row-group">
                     {filteredDocuments.map((doc) => {
                       const isProgrammed = doc.assignment?.route && doc.assignment.route !== 'UNASSIGNED';
                       const isFinalized = doc.assignment?.route && doc.assignment?.dispatchDate && manifests[`${doc.assignment.route}_${doc.assignment.dispatchDate}`]?.isFinalized;
@@ -3249,38 +3265,117 @@ export default function App() {
                       return (
                         <tr 
                           key={doc.id}
-                          className={`group hover:bg-slate-100/50 cursor-pointer transition-all duration-150 ${selectedDocId === doc.id ? 'bg-indigo-50/85 border-l-4 border-indigo-500' : isFinalized ? 'opacity-50 bg-slate-50' : 'bg-white'}`}
+                          className={`group cursor-pointer transition-all duration-150 flex flex-col md:table-row border-b border-slate-100 md:border-0 ${selectedDocId === doc.id ? 'bg-indigo-50/85 md:border-l-4 md:border-indigo-500 ring-2 md:ring-0 ring-inset ring-indigo-500' : isFinalized ? 'opacity-50 bg-slate-50' : 'bg-white hover:bg-slate-100/50'}`}
                           onClick={() => setSelectedDocId(doc.id)}
                         >
-                          <td className="py-4 px-6">
+                          {/* Mobile View */}
+                          <td className="md:hidden p-4 flex flex-col gap-3">
+                             <div className="flex justify-between items-start gap-4">
+                                <div className="flex flex-col gap-1.5 flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className={`px-2 py-0.5 rounded font-mono text-xs font-bold shrink-0 ${doc.tipo === 'OC' ? 'bg-teal-50 text-teal-700 border border-teal-200' : 'text-indigo-700 bg-indigo-50 border border-indigo-150'}`}>
+                                      {formatDocId(doc.tipo, doc.id)}
+                                    </span>
+                                    <span className="text-[10px] text-slate-400 font-medium whitespace-nowrap">
+                                      {new Date(doc.fecha).toLocaleDateString('es-CL')}
+                                    </span>
+                                  </div>
+                                  <span className="font-bold text-sm text-slate-800 line-clamp-2 leading-snug">{doc.razonSocial}</span>
+                                </div>
+                                <div className="flex flex-col items-end gap-1.5 shrink-0">
+                                  <span className="font-mono text-sm font-black text-slate-900">
+                                    ${Math.round(doc.tipo === 'OC' ? 0 : doc.totalPendiente).toLocaleString('es-CL')}
+                                  </span>
+                                  <span className={`px-2 py-0.5 rounded-[4px] text-[10px] font-bold uppercase tracking-wider ${isProgrammed ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                                      {isProgrammed ? 'Prog.' : 'Pend.'}
+                                  </span>
+                                </div>
+                             </div>
+                             <div className="flex justify-between items-end mt-1 text-xs text-slate-500 pt-2 border-t border-slate-50">
+                               <div className="flex flex-col gap-0.5 max-w-[60%]">
+                                 <span className="font-semibold text-slate-700 truncate">{routeMap[doc.assignment?.route || 'UNASSIGNED'] || 'Sin Asignar'}</span>
+                                 <span className="text-[10px] text-slate-400">
+                                   Asig: {doc.assignment?.dispatchDate ? new Date(doc.assignment.dispatchDate + 'T12:00:00').toLocaleDateString('es-CL') : '-'}
+                                 </span>
+                               </div>
+                               <div>
+                                 <button 
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      
+                                      if (isProgrammed) {
+                                        const routeId = doc.assignment?.route;
+                                        const dispatchDate = doc.assignment?.dispatchDate;
+                                        if (routeId && dispatchDate) {
+                                          const mId = `${routeId}_${dispatchDate}`;
+                                          if (manifests[mId]?.isFinalized) {
+                                            showToast("Acción Bloqueada", "Este documento está asignado a una ruta definitiva grabada y no puede desasignarse directamente.", "error");
+                                            return;
+                                          }
+                                        }
+                                        handleDeleteAssignment(doc.id, e);
+                                      } else {
+                                        // Logic to delete the unassigned document record itself
+                                        if (!userProfile?.permissions.canEditPlanning) {
+                                          showToast("Permiso Denegado", "No tienes permiso de 'Modificar Planificación' para eliminar documentos.", "error");
+                                          return;
+                                        }
+                                        requestConfirmation(
+                                          'Eliminar Documento',
+                                          `¿Estás seguro de eliminar el documento ${doc.id} de la lista de pendientes?`,
+                                          () => {
+                                            setLoading(true);
+                                            deleteDoc(doc(db, "pending_documents", doc.id))
+                                              .then(() => showToast("Completado", "Documento eliminado correctamente.", 'success'))
+                                              .catch(err => showToast("Error", "No se pudo eliminar: " + err.message, 'error'))
+                                              .finally(() => setLoading(false));
+                                          },
+                                          'Sí, eliminar',
+                                          'Cancelar',
+                                          'danger'
+                                        );
+                                      }
+                                    }}
+                                    className="p-1.5 bg-red-50 hover:bg-red-100 rounded-lg text-red-500 transition-colors cursor-pointer"
+                                    title={isProgrammed ? "Eliminar asignación" : "Eliminar documento del sistema"}
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                               </div>
+                             </div>
+                          </td>
+
+                          {/* Desktop View */}
+                          <td className="hidden md:table-cell py-4 px-6">
                               <span className={`px-2 py-0.5 rounded font-mono text-[11px] ${doc.tipo === 'OC' ? 'bg-teal-50 text-teal-700 border border-teal-200' : 'text-indigo-700 bg-indigo-50 border border-indigo-150'}`}>
                                 {formatDocId(doc.tipo, doc.id)}
                               </span>
                           </td>
-                          <td className="py-4 px-6 text-slate-500">
+                          <td className="hidden md:table-cell py-4 px-6 text-slate-500">
                               {new Date(doc.fecha).toLocaleDateString('es-CL')}
                           </td>
-                          <td className="py-4 px-6 text-slate-700 truncate max-w-[200px]">
+                          <td className="hidden md:table-cell py-4 px-6 text-slate-700 truncate max-w-[200px]">
                               {doc.razonSocial}
                           </td>
-                          <td className="py-4 px-6 text-slate-500 truncate max-w-[150px]">
+                          <td className="hidden md:table-cell py-4 px-6 text-slate-500 truncate max-w-[150px]">
                               {doc.vendedor?.toUpperCase()}
                           </td>
-                          <td className={`py-4 px-6 ${isProgrammed ? 'text-indigo-600' : 'text-slate-400'}`}>
+                          <td className={`hidden md:table-cell py-4 px-6 ${isProgrammed ? 'text-indigo-600' : 'text-slate-400'}`}>
                               {routeMap[doc.assignment?.route || 'UNASSIGNED'] || 'Sin Asignar'}
                           </td>
-                          <td className="py-4 px-6 text-slate-600">
+                          <td className="hidden md:table-cell py-4 px-6 text-slate-600">
                               {doc.assignment?.dispatchDate ? new Date(doc.assignment.dispatchDate + 'T12:00:00').toLocaleDateString('es-CL') : '-'}
                           </td>
-                          <td className="py-4 px-6 text-right font-mono text-slate-800">
+                          <td className="hidden md:table-cell py-4 px-6 text-right font-mono text-slate-800">
                               ${Math.round(doc.tipo === 'OC' ? 0 : doc.totalPendiente).toLocaleString('es-CL')}
                           </td>
-                          <td className="py-4 px-6">
+                          <td className="hidden md:table-cell py-4 px-6">
                               <span className={`px-2 py-1 rounded-[4px] text-[9px] uppercase tracking-wider ${isProgrammed ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
                                   {isProgrammed ? 'Prog.' : 'Pend.'}
                               </span>
                           </td>
-                          <td className="py-4 px-6">
+                          <td className="hidden md:table-cell py-4 px-6">
                               <button 
                                   type="button"
                                   onClick={(e) => {
@@ -3348,16 +3443,17 @@ export default function App() {
             </main>
 
             {/* Right sidebar: scheduling detail panels */}
-            <aside className="w-80 bg-slate-100 border-l border-slate-200 p-6 flex flex-col gap-6 shrink-0 overflow-y-auto">
+            <aside className={`bg-slate-100 md:border-l border-slate-200 p-6 flex flex-col gap-6 shrink-0 overflow-y-auto ${selectedDoc ? 'fixed inset-0 z-[60] w-full md:relative md:z-0 md:w-80' : 'hidden md:flex md:w-80'}`}>
               {selectedDoc ? (
                 <>
                   <div className="flex items-center justify-between">
-                    <h2 className="font-normal text-slate-800 text-xs">Programación Logística</h2>
+                    <h2 className="font-bold md:font-normal text-slate-800 text-sm md:text-xs">Programación Logística</h2>
                     <button 
                         onClick={() => setSelectedDocId(null)} 
-                        className="text-[10px] text-slate-400 hover:text-slate-600 font-normal uppercase tracking-widest cursor-pointer"
+                        className="text-[10px] text-slate-400 hover:text-slate-600 font-normal uppercase tracking-widest cursor-pointer p-2 md:p-0 -mr-2 md:mr-0"
                     >
-                        Cerrar
+                        <span className="hidden md:inline">Cerrar</span>
+                        <X className="w-6 h-6 md:hidden" />
                     </button>
                   </div>
 
@@ -3376,26 +3472,6 @@ export default function App() {
                         <span className="text-sm border-l border-slate-100 pl-3 font-mono">${Math.round(selectedDoc.tipo === 'OC' ? 0 : selectedDoc.totalPendiente).toLocaleString('es-CL')}</span>
                       </div>
                       <p className="text-xs text-slate-600 font-normal truncate">{selectedDoc.razonSocial}</p>
-                    </div>
-                    
-                    {selectedDoc.observaciones && (
-                        <div className="p-2 bg-slate-50 rounded border border-slate-100 italic text-[10px] text-slate-500">
-                            <span className="font-normal text-slate-600 block not-italic uppercase mb-1">Notas de Venta:</span>
-                            {selectedDoc.observaciones}
-                        </div>
-                    )}
-                    
-                    <div className="pt-2 border-t border-slate-100 max-h-32 overflow-y-auto">
-                        <p className="text-[10px] font-normal text-slate-400 uppercase mb-2">Detalle Items ({selectedDoc.detalle.length})</p>
-                        {selectedDoc.detalle.map((item, i) => (
-                            <div key={i} className="flex flex-col py-1.5 border-b border-slate-50 last:border-0 gap-0.5">
-                                <div className="flex justify-between items-start text-[11px] mb-0.5">
-                                    <span className="font-mono font-bold text-indigo-700">{item.codigo}</span>
-                                    <span className="font-bold text-slate-900">{item.cantidad} UND</span>
-                                </div>
-                                <span className="text-slate-600 text-[10px] leading-tight font-medium">{item.descripcion}</span>
-                            </div>
-                        ))}
                     </div>
 
                     <div className="flex flex-col gap-4 pt-2 border-t border-slate-100">
@@ -3473,6 +3549,26 @@ export default function App() {
                           <span>Eliminar Planificación</span>
                         </button>
                       )}
+                    </div>
+                    
+                    {selectedDoc.observaciones && (
+                        <div className="p-2 bg-slate-50 rounded border border-slate-100 italic text-[10px] text-slate-500 mt-2">
+                            <span className="font-normal text-slate-600 block not-italic uppercase mb-1">Notas de Venta:</span>
+                            {selectedDoc.observaciones}
+                        </div>
+                    )}
+                    
+                    <div className="pt-2 border-t border-slate-100 max-h-32 overflow-y-auto">
+                        <p className="text-[10px] font-normal text-slate-400 uppercase mb-2">Detalle Items ({selectedDoc.detalle.length})</p>
+                        {selectedDoc.detalle.map((item, i) => (
+                            <div key={i} className="flex flex-col py-1.5 border-b border-slate-50 last:border-0 gap-0.5">
+                                <div className="flex justify-between items-start text-[11px] mb-0.5">
+                                    <span className="font-mono font-bold text-indigo-700">{item.codigo}</span>
+                                    <span className="font-bold text-slate-900">{item.cantidad} UND</span>
+                                </div>
+                                <span className="text-slate-600 text-[10px] leading-tight font-medium">{item.descripcion}</span>
+                            </div>
+                        ))}
                     </div>
                   </div>
                 </>
