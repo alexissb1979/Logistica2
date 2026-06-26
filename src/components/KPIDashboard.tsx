@@ -63,7 +63,7 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
   // Filters
   const [selectedDriver, setSelectedDriver] = useState<string>('ALL');
   const [selectedRoute, setSelectedRoute] = useState<string>('ALL');
-  const [timeSpan, setTimeSpan] = useState<'ALL' | 'LAST_7' | 'LAST_30' | 'THIS_MONTH'>('ALL');
+  const [timeSpan, setTimeSpan] = useState<'ALL' | 'LAST_7' | 'LAST_30' | 'THIS_MONTH' | 'UNTIL_YESTERDAY'>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
   // Modal detail states for clicking charts
@@ -126,6 +126,9 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
           if (manifestDate.getMonth() !== now.getMonth() || manifestDate.getFullYear() !== now.getFullYear()) {
             return false;
           }
+        } else if (timeSpan === 'UNTIL_YESTERDAY') {
+          const today = new Date(now);
+          if (manifestDate >= today) return false;
         }
       }
 
@@ -317,6 +320,7 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
       docs.forEach(d => {
         docsList.push({
           ...d,
+          proceso: d.proceso ? (d.proceso.trim().toUpperCase() as 'ENTREGA' | 'RETIRO') : (d.tipo === 'OC' ? 'RETIRO' : 'ENTREGA'),
           routeNumber: m.routeNumber,
           date: m.date,
           driverName: driverMap[m.driverId] || m.driverId,
@@ -424,6 +428,10 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
       const isFailed = item.trackingStatus === 'NO ENTREGADO' || item.trackingStatus === 'NO RETIRADO';
       if (!isFailed) return false;
       
+      if (deviationsTypeFilter !== 'ALL' && item.proceso !== deviationsTypeFilter) {
+        return false;
+      }
+
       const reason = item.failedReason || '';
       if (zoomedReason === 'OTRO / SIN ESPECIFICAR') {
         return !['POR HORARIO', 'CLIENTE NO RECIBE', 'NO CARGADO', 'SIN STOCK', 'DESCORDINACION', 'DESCOORDINACION'].includes(reason);
@@ -433,7 +441,7 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
       }
       return reason === zoomedReason;
     });
-  }, [allServiceLevelDocuments, zoomedReason]);
+  }, [allServiceLevelDocuments, zoomedReason, deviationsTypeFilter]);
 
   // 3. Prepare Chart Data grouped by dispatch date for Trends
   const dateTrendData = useMemo(() => {
@@ -775,6 +783,7 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
                 className="w-full bg-white border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-600/15 focus:border-indigo-600 rounded-xl pl-9 pr-4 py-2 text-xs font-bold text-slate-800 transition-all cursor-pointer"
               >
                 <option value="ALL">Histórico Completo</option>
+                <option value="UNTIL_YESTERDAY">Hasta Ayer</option>
                 <option value="LAST_7">Últimos 7 Días</option>
                 <option value="LAST_30">Últimos 30 Días</option>
                 <option value="THIS_MONTH">Este Mes</option>

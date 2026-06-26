@@ -3,7 +3,7 @@ import {
   Upload, FileText, Search, Save, Calendar as CalendarIcon, MapPin, 
   Info, Trash2, Edit2, Truck, User, List, ArrowUp, ArrowDown, 
   ClipboardList, Printer, AlertCircle, AlertTriangle, RotateCcw, Lock, LogOut, Users, Shield, Loader, X, Plus, BarChart3,
-  ExternalLink
+  ExternalLink, Menu
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import Calendar from 'react-calendar';
@@ -81,6 +81,7 @@ export default function App() {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [userManagerOpen, setUserManagerOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const [activeTab, setActiveTab] = useState<'dashboard' | 'hojaDeRuta' | 'resumenRutas' | 'kpis' | 'solicitudes'>('dashboard');
   const [isOnline, setIsOnline] = useState(navigator.onLine);
@@ -2947,66 +2948,84 @@ export default function App() {
       </AnimatePresence>
 
       {/* Header */}
-      <header className="h-16 bg-slate-900 text-white flex items-center justify-between px-6 shrink-0 border-b border-slate-700 shadow-lg relative" id="main-app-header">
-        <div className="flex items-center gap-6">
-        <div className="flex items-center gap-4">
-          <img 
-            src={logoAntko} 
-            alt="Antko Logo" 
-            className="h-10 w-auto object-contain" 
-            referrerPolicy="no-referrer"
-          />
-          <div className="h-8 w-px bg-slate-700 mx-1" />
-          <div className="flex items-center gap-2.5">
-            <h1 className="text-lg font-bold tracking-tighter text-slate-200">Gestión Logística</h1>
-            <div className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-widest transition-all duration-300 ${isOnline ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-amber-500/10 text-amber-400 border border-amber-500/20 animate-pulse'}`}>
-              <span className={`w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-emerald-500' : 'bg-amber-500'}`} />
-              {isOnline ? 'Sincronizado' : 'Modo Offline'}
+      <header className="h-auto min-h-[64px] bg-slate-900 text-white flex flex-col md:flex-row md:items-center justify-between px-4 sm:px-6 shrink-0 border-b border-slate-700 shadow-lg relative z-[60]" id="main-app-header">
+        <div className="flex items-center justify-between h-16 w-full md:w-auto">
+          <div className="flex items-center gap-2 sm:gap-4">
+            <button 
+              className="lg:hidden p-2 -ml-2 text-slate-300 hover:text-white hover:bg-slate-800 rounded-lg cursor-pointer"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            >
+              {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+            </button>
+            <img 
+              src={logoAntko} 
+              alt="Antko Logo" 
+              className="h-8 sm:h-10 w-auto object-contain" 
+              referrerPolicy="no-referrer"
+            />
+            <div className="h-6 sm:h-8 w-px bg-slate-700 mx-0.5 sm:mx-1" />
+            <div className="flex items-center gap-2.5">
+              <h1 className="text-base sm:text-lg font-bold tracking-tighter text-slate-200 hidden sm:block">Gestión Logística</h1>
+              <div className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[9px] sm:text-[10px] font-extrabold uppercase tracking-widest transition-all duration-300 ${isOnline ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-amber-500/10 text-amber-400 border border-amber-500/20 animate-pulse'}`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+                {isOnline ? 'Sincronizado' : 'Offline'}
+              </div>
             </div>
+          </div>
+
+          <div className="flex items-center gap-3 border-l border-slate-700 pl-4 text-neutral-200 md:hidden">
+            <button 
+              onClick={handleSignOut}
+              className="p-1.5 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-red-400 transition-colors cursor-pointer"
+              title="Cerrar Sesión"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
           </div>
         </div>
           
-          <nav className="flex items-center bg-slate-800 rounded-lg p-1 ml-4 border border-slate-700" id="navigation-bar">
+        <div className={`flex flex-col lg:flex-row lg:items-center w-full lg:w-auto gap-4 pb-4 lg:pb-0 ${mobileMenuOpen ? 'block' : 'hidden lg:flex'}`}>
+          <nav className="flex flex-col lg:flex-row lg:items-center bg-slate-800 rounded-lg p-1 lg:ml-4 border border-slate-700 gap-1 lg:gap-0" id="navigation-bar">
             {userProfile?.permissions.canViewPlanning && (
               <button 
-                onClick={() => setActiveTab('dashboard')}
-                className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${activeTab === 'dashboard' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
+                onClick={() => { setActiveTab('dashboard'); setMobileMenuOpen(false); }}
+                className={`px-4 py-2 lg:py-1.5 rounded-md text-sm lg:text-xs font-bold transition-all flex items-center gap-2 cursor-pointer text-left ${activeTab === 'dashboard' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-700/50'}`}
               >
-                <List className="w-3.5 h-3.5" /> Planificación
+                <List className="w-4 h-4 lg:w-3.5 lg:h-3.5" /> Planificación
               </button>
             )}
             {userProfile?.permissions.canViewRouteSheets && (
               <button 
-                onClick={() => setActiveTab('hojaDeRuta')}
-                className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${activeTab === 'hojaDeRuta' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
+                onClick={() => { setActiveTab('hojaDeRuta'); setMobileMenuOpen(false); }}
+                className={`px-4 py-2 lg:py-1.5 rounded-md text-sm lg:text-xs font-bold transition-all flex items-center gap-2 cursor-pointer text-left ${activeTab === 'hojaDeRuta' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-700/50'}`}
               >
-                <ClipboardList className="w-3.5 h-3.5" /> Hoja de Ruta
+                <ClipboardList className="w-4 h-4 lg:w-3.5 lg:h-3.5" /> Hoja de Ruta
               </button>
             )}
             {userProfile?.permissions.canViewResumenRutas && (
               <button 
-                onClick={() => setActiveTab('resumenRutas')}
-                className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${activeTab === 'resumenRutas' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
+                onClick={() => { setActiveTab('resumenRutas'); setMobileMenuOpen(false); }}
+                className={`px-4 py-2 lg:py-1.5 rounded-md text-sm lg:text-xs font-bold transition-all flex items-center gap-2 cursor-pointer text-left ${activeTab === 'resumenRutas' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-700/50'}`}
               >
-                <Truck className="w-3.5 h-3.5" /> Resumen de Rutas
+                <Truck className="w-4 h-4 lg:w-3.5 lg:h-3.5" /> Resumen de Rutas
               </button>
             )}
              {userProfile?.permissions.canViewKPIs && (
               <button 
-                onClick={() => setActiveTab('kpis')}
-                className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${activeTab === 'kpis' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
+                onClick={() => { setActiveTab('kpis'); setMobileMenuOpen(false); }}
+                className={`px-4 py-2 lg:py-1.5 rounded-md text-sm lg:text-xs font-bold transition-all flex items-center gap-2 cursor-pointer text-left ${activeTab === 'kpis' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-700/50'}`}
               >
-                <BarChart3 className="w-3.5 h-3.5" /> KPIs y Análisis
+                <BarChart3 className="w-4 h-4 lg:w-3.5 lg:h-3.5" /> KPIs y Análisis
               </button>
             )}
             <button 
-              onClick={() => setActiveTab('solicitudes')}
-              className={`px-4 py-1.5 rounded-md text-xs font-black transition-all flex items-center gap-2 cursor-pointer relative ${activeTab === 'solicitudes' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'} ${requests.filter(r => r.status === 'PENDIENTE').length > 0 ? 'border border-amber-500/35 bg-slate-800/80 animate-pulse text-amber-300' : ''}`}
+              onClick={() => { setActiveTab('solicitudes'); setMobileMenuOpen(false); }}
+              className={`px-4 py-2 lg:py-1.5 rounded-md text-sm lg:text-xs font-black transition-all flex items-center gap-2 cursor-pointer text-left relative ${activeTab === 'solicitudes' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-700/50'} ${requests.filter(r => r.status === 'PENDIENTE').length > 0 ? 'border border-amber-500/35 bg-slate-800/80 animate-pulse text-amber-300' : ''}`}
             >
-              <ClipboardList className={`w-3.5 h-3.5 ${requests.filter(r => r.status === 'PENDIENTE').length > 0 ? 'text-amber-400' : ''}`} /> 
+              <ClipboardList className={`w-4 h-4 lg:w-3.5 lg:h-3.5 ${requests.filter(r => r.status === 'PENDIENTE').length > 0 ? 'text-amber-400' : ''}`} /> 
               <span>Solicitudes</span>
               {requests.filter(r => r.status === 'PENDIENTE').length > 0 && (
-                <span className="flex items-center gap-1">
+                <span className="flex items-center gap-1 ml-auto lg:ml-0">
                   <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
                   <span className="px-1.5 py-0.5 rounded-full text-[9px] bg-red-500 text-white font-black animate-bounce shrink-0">
                     {requests.filter(r => r.status === 'PENDIENTE').length}
@@ -3015,57 +3034,57 @@ export default function App() {
               )}
             </button>
           </nav>
-        </div>
 
-        <div className="flex items-center gap-4">
-          {userProfile?.permissions.canEditParameters && (
-            <button 
-              onClick={() => setIsManagingParameters(true)}
-              className="flex items-center gap-2 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 rounded-lg text-xs font-bold transition-all border border-slate-700 cursor-pointer"
-            >
-              <Edit2 className="w-3.5 h-3.5 text-indigo-400" />
-              <span>Parámetros</span>
-            </button>
-          )}
-          
-          {userProfile?.permissions.canUploadExcel && (
-            <div className="flex gap-2">
-              <label className={`px-4 py-2 rounded-md text-xs font-bold transition-all flex items-center gap-2 shadow-md ${loading ? 'bg-slate-800 text-slate-500 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-500 text-white cursor-pointer'}`}>
-                  <Upload className="w-3 h-3" /> NV
-                  <input type="file" className="hidden" accept=".xlsx, .xls" onChange={(e) => handleFileUpload(e, 'NV')} disabled={loading} />
-              </label>
-              <label className={`px-4 py-2 rounded-md text-xs font-bold transition-all flex items-center gap-2 shadow-md ${loading ? 'bg-slate-800 text-slate-500 cursor-not-allowed' : 'bg-slate-700 hover:bg-slate-600 text-white cursor-pointer'}`}>
-                  <Upload className="w-3 h-3" /> OC
-                  <input type="file" className="hidden" accept=".xlsx, .xls" onChange={(e) => handleFileUpload(e, 'OC')} disabled={loading} />
-              </label>
-            </div>
-          )}
-
-          {/* User Session and Actions */}
-          <div className="flex items-center gap-3 border-l border-slate-700 pl-4 h-8 text-neutral-200">
-            <div className="flex flex-col text-right">
-              <span className="text-xs font-bold text-white max-w-[120px] truncate">{userProfile?.displayName}</span>
-              <span className="text-[9px] text-slate-400 font-medium capitalize flex items-center justify-end gap-1 select-none">
-                {userProfile?.role === 'ADMIN' && <Shield className="w-2.5 h-2.5 text-amber-500 shrink-0" />}
-                {userProfile?.role === 'ADMIN' ? 'Admin General' : userProfile?.role === 'OPERATOR' ? 'Operador' : 'Visor'}
-              </span>
-            </div>
-            {userProfile?.permissions.canManageUsers && (
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4 border-t border-slate-700 lg:border-t-0 pt-4 lg:pt-0">
+            {userProfile?.permissions.canEditParameters && (
               <button 
-                onClick={() => setUserManagerOpen(true)}
-                className="p-1.5 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-indigo-400 transition-colors cursor-pointer"
-                title="Administrar Usuarios"
+                onClick={() => { setIsManagingParameters(true); setMobileMenuOpen(false); }}
+                className="flex items-center gap-2 px-4 py-2 lg:px-3 lg:py-1.5 bg-slate-800 hover:bg-slate-700 rounded-lg text-sm lg:text-xs font-bold transition-all border border-slate-700 cursor-pointer w-full sm:w-auto justify-center"
               >
-                <Users className="w-4 h-4" />
+                <Edit2 className="w-4 h-4 lg:w-3.5 lg:h-3.5 text-indigo-400" />
+                <span>Parámetros</span>
               </button>
             )}
-            <button 
-              onClick={handleSignOut}
-              className="p-1.5 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-red-400 transition-colors cursor-pointer"
-              title="Cerrar Sesión"
-            >
-              <LogOut className="w-4 h-4" />
-            </button>
+            
+            {userProfile?.permissions.canUploadExcel && (
+              <div className="flex gap-2 w-full sm:w-auto">
+                <label className={`flex-1 sm:flex-none justify-center px-4 py-2 rounded-md text-sm lg:text-xs font-bold transition-all flex items-center gap-2 shadow-md ${loading ? 'bg-slate-800 text-slate-500 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-500 text-white cursor-pointer'}`}>
+                    <Upload className="w-4 h-4 lg:w-3 lg:h-3" /> NV
+                    <input type="file" className="hidden" accept=".xlsx, .xls" onChange={(e) => { handleFileUpload(e, 'NV'); setMobileMenuOpen(false); }} disabled={loading} />
+                </label>
+                <label className={`flex-1 sm:flex-none justify-center px-4 py-2 rounded-md text-sm lg:text-xs font-bold transition-all flex items-center gap-2 shadow-md ${loading ? 'bg-slate-800 text-slate-500 cursor-not-allowed' : 'bg-slate-700 hover:bg-slate-600 text-white cursor-pointer'}`}>
+                    <Upload className="w-4 h-4 lg:w-3 lg:h-3" /> OC
+                    <input type="file" className="hidden" accept=".xlsx, .xls" onChange={(e) => { handleFileUpload(e, 'OC'); setMobileMenuOpen(false); }} disabled={loading} />
+                </label>
+              </div>
+            )}
+
+            {/* User Session and Actions */}
+            <div className="hidden md:flex items-center gap-3 lg:border-l border-slate-700 lg:pl-4 h-8 text-neutral-200">
+              <div className="flex flex-col text-right">
+                <span className="text-xs font-bold text-white max-w-[120px] truncate">{userProfile?.displayName}</span>
+                <span className="text-[9px] text-slate-400 font-medium capitalize flex items-center justify-end gap-1 select-none">
+                  {userProfile?.role === 'ADMIN' && <Shield className="w-2.5 h-2.5 text-amber-500 shrink-0" />}
+                  {userProfile?.role === 'ADMIN' ? 'Admin General' : userProfile?.role === 'OPERATOR' ? 'Operador' : 'Visor'}
+                </span>
+              </div>
+              {userProfile?.permissions.canManageUsers && (
+                <button 
+                  onClick={() => { setUserManagerOpen(true); setMobileMenuOpen(false); }}
+                  className="p-1.5 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-indigo-400 transition-colors cursor-pointer"
+                  title="Administrar Usuarios"
+                >
+                  <Users className="w-4 h-4" />
+                </button>
+              )}
+              <button 
+                onClick={handleSignOut}
+                className="p-1.5 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-red-400 transition-colors cursor-pointer"
+                title="Cerrar Sesión"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         </div>
       </header>
@@ -3471,14 +3490,14 @@ export default function App() {
         {/* Generate Manifest sheet tab */}
         {activeTab === 'hojaDeRuta' && (
           <div className="flex-1 flex flex-col overflow-hidden bg-slate-50 animate-fade-in" id="hoja-de-ruta-panel">
-            <div className="p-6 bg-white border-b border-slate-200 shadow-sm flex flex-col gap-6">
-              <div className="flex items-center justify-between">
+            <div className="p-4 sm:p-6 bg-white border-b border-slate-200 shadow-sm flex flex-col gap-4 sm:gap-6">
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                   <div className="flex items-center gap-4">
                     <div>
-                      <h2 className="text-lg font-bold text-slate-800 tracking-tight flex items-center gap-2">
-                        <ClipboardList className="w-5 h-5 text-indigo-600" /> Generador de Hoja de Ruta
+                      <h2 className="text-base sm:text-lg font-bold text-slate-800 tracking-tight flex items-center gap-2">
+                        <ClipboardList className="w-4 h-4 sm:w-5 sm:h-5 text-indigo-600" /> Generador de Hoja de Ruta
                       </h2>
-                      <p className="text-xs text-slate-500">Configura el orden y detalles para el transportista</p>
+                      <p className="text-[10px] sm:text-xs text-slate-500">Configura el orden y detalles para el transportista</p>
                     </div>
                   </div>
                 
@@ -3856,9 +3875,9 @@ export default function App() {
                               ><ArrowDown className="w-4 h-4" /></button>
                             </div>
 
-                            <div className="flex-1 grid grid-cols-12 gap-4 items-center">
-                              <div className={doc.tipo === 'OC' ? "col-span-3" : "col-span-2"}>
-                                <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Cliente</p>
+                            <div className="flex-1 flex flex-col md:grid md:grid-cols-12 gap-3 md:gap-4 md:items-center">
+                              <div className={`md:${doc.tipo === 'OC' ? "col-span-3" : "col-span-2"}`}>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase mb-0.5 md:mb-1">Cliente</p>
                                 <div className="flex items-center gap-2">
                                   <p className="text-xs font-bold text-slate-800 truncate">{doc.razonSocial}</p>
                                   {(doc.isOrphaned || doc.isAdditional) && (
@@ -3873,64 +3892,69 @@ export default function App() {
 
                               {doc.tipo !== 'OC' && (
                                 <>
-                                  <div className="col-span-2">
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Guía Despacho</p>
-                                    <input 
-                                      disabled={hrIsFinalized}
-                                      type="text" 
-                                      placeholder="N° Guía..."
-                                      className={`w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-bold focus:ring-2 focus:ring-indigo-500/10 focus:outline-none ${hrIsFinalized ? 'opacity-60 cursor-not-allowed bg-slate-100' : ''}`}
-                                      value={doc.assignment?.guideNumber || ''}
-                                      onChange={(e) => handleUpdateAssignment(doc.id, 'guideNumber', e.target.value)}
-                                    />
-                                  </div>
+                                  <div className="md:col-span-2 grid grid-cols-2 md:grid-cols-1 gap-2 md:gap-0">
+                                    <div className="flex flex-col">
+                                      <p className="text-[10px] font-bold text-slate-400 uppercase mb-0.5 md:mb-1">Guía Despacho</p>
+                                      <input 
+                                        disabled={hrIsFinalized}
+                                        type="text" 
+                                        placeholder="N° Guía..."
+                                        className={`w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 md:py-1.5 text-xs font-bold focus:ring-2 focus:ring-indigo-500/10 focus:outline-none ${hrIsFinalized ? 'opacity-60 cursor-not-allowed bg-slate-100' : ''}`}
+                                        value={doc.assignment?.guideNumber || ''}
+                                        onChange={(e) => handleUpdateAssignment(doc.id, 'guideNumber', e.target.value)}
+                                      />
+                                    </div>
 
-                                  <div className="col-span-2">
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Tipo Despacho</p>
-                                    <select 
-                                      disabled={hrIsFinalized && userProfile?.role !== 'ADMIN' && userProfile?.role !== 'OPERATOR'}
-                                      className={`w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-[10px] font-bold focus:ring-2 focus:ring-indigo-500/10 focus:outline-none ${hrIsFinalized && userProfile?.role !== 'ADMIN' && userProfile?.role !== 'OPERATOR' ? 'opacity-60 cursor-not-allowed bg-slate-100' : 'cursor-pointer'} ${doc.assignment?.deliveryStatus === 'PARCIAL' ? 'text-rose-600' : 'text-emerald-600'}`}
-                                      value={doc.assignment?.deliveryStatus || 'COMPLETO'}
-                                      onChange={(e) => handleUpdateAssignment(doc.id, 'deliveryStatus', e.target.value)}
-                                    >
-                                      <option value="COMPLETO">COMPLETO</option>
-                                      <option value="PARCIAL">PARCIAL</option>
-                                    </select>
+                                    <div className="flex flex-col">
+                                      <p className="text-[10px] font-bold text-slate-400 uppercase mb-0.5 md:mb-1 md:mt-2 hidden md:block">Tipo Despacho</p>
+                                      <p className="text-[10px] font-bold text-slate-400 uppercase mb-0.5 md:mb-1 md:hidden">Tipo</p>
+                                      <select 
+                                        disabled={hrIsFinalized && userProfile?.role !== 'ADMIN' && userProfile?.role !== 'OPERATOR'}
+                                        className={`w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-2 md:py-1.5 text-xs md:text-[10px] font-bold focus:ring-2 focus:ring-indigo-500/10 focus:outline-none ${hrIsFinalized && userProfile?.role !== 'ADMIN' && userProfile?.role !== 'OPERATOR' ? 'opacity-60 cursor-not-allowed bg-slate-100' : 'cursor-pointer'} ${doc.assignment?.deliveryStatus === 'PARCIAL' ? 'text-rose-600' : 'text-emerald-600'}`}
+                                        value={doc.assignment?.deliveryStatus || 'COMPLETO'}
+                                        onChange={(e) => handleUpdateAssignment(doc.id, 'deliveryStatus', e.target.value)}
+                                      >
+                                        <option value="COMPLETO">COMPLETO</option>
+                                        <option value="PARCIAL">PARCIAL</option>
+                                      </select>
+                                    </div>
                                   </div>
                                 </>
                               )}
 
-                              <div className="col-span-2">
-                                <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Ubicación</p>
-                                <input 
-                                  disabled={hrIsFinalized}
-                                  type="text" 
-                                  placeholder="Ubicación..."
-                                  className={`w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-bold focus:ring-2 focus:ring-indigo-500/10 focus:outline-none ${hrIsFinalized ? 'opacity-60 cursor-not-allowed bg-slate-100' : ''}`}
-                                  value={doc.assignment?.location || ''}
-                                  onChange={(e) => handleUpdateAssignment(doc.id, 'location', e.target.value)}
-                                />
+                              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-1 md:col-span-2 gap-2 md:gap-0">
+                                <div className="flex flex-col">
+                                  <p className="text-[10px] font-bold text-slate-400 uppercase mb-0.5 md:mb-1">Ubicación</p>
+                                  <input 
+                                    disabled={hrIsFinalized}
+                                    type="text" 
+                                    placeholder="Ubicación..."
+                                    className={`w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 md:py-1.5 text-xs font-bold focus:ring-2 focus:ring-indigo-500/10 focus:outline-none ${hrIsFinalized ? 'opacity-60 cursor-not-allowed bg-slate-100' : ''}`}
+                                    value={doc.assignment?.location || ''}
+                                    onChange={(e) => handleUpdateAssignment(doc.id, 'location', e.target.value)}
+                                  />
+                                </div>
                               </div>
 
-                              <div className={doc.tipo === 'OC' ? "col-span-7" : "col-span-2"}>
-                                <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Obs. Logísticas / Despacho</p>
+                              <div className={`md:${doc.tipo === 'OC' ? "col-span-7" : "col-span-2"}`}>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase mb-0.5 md:mb-1">Obs. Logísticas / Despacho</p>
                                 <input 
                                   disabled={hrIsFinalized}
                                   type="text" 
                                   placeholder="Notas para el conductor..."
-                                  className={`w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-medium focus:ring-2 focus:ring-indigo-500/10 focus:outline-none ${hrIsFinalized ? 'opacity-60 cursor-not-allowed bg-slate-100' : ''}`}
+                                  className={`w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 md:py-1.5 text-xs font-medium focus:ring-2 focus:ring-indigo-500/10 focus:outline-none ${hrIsFinalized ? 'opacity-60 cursor-not-allowed bg-slate-100' : ''}`}
                                   value={doc.assignment?.logisticsNotes || ''}
                                   onChange={(e) => handleUpdateAssignment(doc.id, 'logisticsNotes', e.target.value)}
                                 />
                               </div>
 
                               {doc.tipo !== 'OC' && (
-                                <div className="col-span-2 text-right">
-                                  <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Total</p>
+                                <div className="md:col-span-2 text-left md:text-right">
+                                  <p className="text-[10px] font-bold text-slate-400 uppercase mb-0.5 md:mb-1">Total</p>
                                   <input 
                                     disabled={hrIsFinalized && userProfile?.role !== 'ADMIN'}
                                     type="text"
-                                    className={`w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-xs font-mono font-bold text-right focus:ring-2 focus:ring-indigo-500/10 focus:outline-none ${hrIsFinalized && userProfile?.role !== 'ADMIN' ? 'opacity-60 cursor-not-allowed bg-slate-100' : ''}`}
+                                    className={`w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 md:py-1 text-xs font-mono font-bold text-left md:text-right focus:ring-2 focus:ring-indigo-500/10 focus:outline-none ${hrIsFinalized && userProfile?.role !== 'ADMIN' ? 'opacity-60 cursor-not-allowed bg-slate-100' : ''}`}
                                     value={doc.assignment?.totalAmount !== undefined ? formatCLP(doc.assignment.totalAmount) : formatCLP(doc.totalPendiente)}
                                     onChange={(e) => {
                                       const val = parseCLP(e.target.value);
