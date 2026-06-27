@@ -72,6 +72,7 @@ export const LogisticsRequestsManager: React.FC<LogisticsRequestsManagerProps> =
   const [observationText, setObservationText] = useState('');
   const [isHistoryTab, setIsHistoryTab] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [isFormCollapsed, setIsFormCollapsed] = useState(true);
 
   // Submit Handler
   const handleSubmit = async (e: React.FormEvent) => {
@@ -111,6 +112,7 @@ export const LogisticsRequestsManager: React.FC<LogisticsRequestsManagerProps> =
       const dd = String(today.getDate()).padStart(2, '0');
       setTargetDate(`${yyyy}-${mm}-${dd}`);
       setAlarmDate(`${yyyy}-${mm}-${dd}`);
+      setIsFormCollapsed(true); // Collapse on mobile after submit
     } catch (err) {
       console.error(err);
     } finally {
@@ -128,6 +130,7 @@ export const LogisticsRequestsManager: React.FC<LogisticsRequestsManagerProps> =
     setTargetDate(req.targetDate || '');
     setAlarmOption(req.alarmOption || 'SAME_DAY');
     setAlarmDate(req.alarmDate || '');
+    setIsFormCollapsed(false); // Auto expand form on edit
   };
 
   const handleCancelEdit = () => {
@@ -144,6 +147,7 @@ export const LogisticsRequestsManager: React.FC<LogisticsRequestsManagerProps> =
     const dd = String(today.getDate()).padStart(2, '0');
     setTargetDate(`${yyyy}-${mm}-${dd}`);
     setAlarmDate(`${yyyy}-${mm}-${dd}`);
+    setIsFormCollapsed(true); // Collapse on cancel
   };
 
   const handleDeleteSubmit = async (id: string) => {
@@ -190,7 +194,7 @@ export const LogisticsRequestsManager: React.FC<LogisticsRequestsManagerProps> =
     <div className="flex-1 flex flex-col md:flex-row overflow-hidden bg-slate-50 animate-fade-in" id="requests-manager-panel">
       
       {/* LEFT SECTION: Submit request Form */}
-      <div className="w-full md:w-[380px] bg-white border-r border-slate-200 p-6 flex flex-col overflow-y-auto shrink-0 text-left">
+      <div className={`w-full md:w-[380px] bg-white border-r border-slate-200 p-5 md:p-6 flex flex-col overflow-y-auto shrink-0 text-left ${isFormCollapsed ? 'hidden md:flex' : 'flex'}`}>
         <div className="mb-6">
           <div className="flex items-center justify-between gap-2 mb-1">
             <div className="flex items-center gap-2">
@@ -198,13 +202,29 @@ export const LogisticsRequestsManager: React.FC<LogisticsRequestsManagerProps> =
                 <ClipboardList className="w-4 h-4" />
               </div>
               <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight">
-                {editingRequest ? 'Editar Solicitud' : 'Crear Nueva Solicitud'}
+                {editingRequest ? 'Editar Solicitud' : 'Nueva Solicitud'}
               </h3>
             </div>
+            {/* Close button on mobile */}
+            <button 
+              type="button"
+              onClick={() => {
+                if (editingRequest) {
+                  handleCancelEdit();
+                } else {
+                  setIsFormCollapsed(true);
+                }
+              }}
+              className="md:hidden p-1.5 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-600 transition-all cursor-pointer"
+              title="Cerrar formulario"
+            >
+              <X className="w-4 h-4" />
+            </button>
             {editingRequest && (
               <button 
+                type="button"
                 onClick={handleCancelEdit}
-                className="p-1 hover:bg-slate-100 rounded text-slate-400 hover:text-slate-600 transition-all cursor-pointer"
+                className="hidden md:block p-1 hover:bg-slate-100 rounded text-slate-400 hover:text-slate-600 transition-all cursor-pointer"
                 title="Cancelar Edición"
               >
                 <X className="w-4 h-4" />
@@ -383,48 +403,61 @@ export const LogisticsRequestsManager: React.FC<LogisticsRequestsManagerProps> =
 
       {/* RIGHT SECTION: Interactive list and history */}
       <div className="flex-1 flex flex-col overflow-hidden">
+        
+        {/* Mobile Quick Add Button */}
+        {isFormCollapsed && (
+          <div className="md:hidden p-4 bg-white border-b border-slate-150 shrink-0">
+            <button 
+              onClick={() => setIsFormCollapsed(false)}
+              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs py-3.5 px-4 rounded-xl flex items-center justify-center gap-2 uppercase tracking-wider transition-all shadow-md active:scale-95 cursor-pointer shadow-indigo-600/10"
+            >
+              <Plus className="w-4 h-4 text-white" /> Crear Nueva Solicitud
+            </button>
+          </div>
+        )}
+
         {/* Subheader / Tabs */}
-        <div className="p-6 bg-white border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-left">
+        <div className="p-4 md:p-6 bg-white border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-left">
           <div>
-            <h2 className="text-lg font-black text-slate-900 tracking-tight flex items-center gap-2">
-              📋 Control de Solicitudes Pendientes
+            <h2 className="text-base md:text-lg font-black text-slate-900 tracking-tight flex items-center gap-2">
+              📋 Control de Solicitudes
             </h2>
-            <p className="text-xs text-slate-500 font-medium">
+            <p className="text-[10px] md:text-xs text-slate-500 font-medium">
               Gestiona, marca completadas y revisa las observaciones del equipo de reparto.
             </p>
           </div>
 
           <div className="flex items-center gap-3">
             {/* Search Input */}
-            <div className="relative">
+            <div className="relative w-full sm:w-auto">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-3.5 h-3.5" />
               <input 
                 type="text"
                 placeholder="Buscar solicitud..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="bg-slate-50 border border-slate-200 focus:outline-none focus:ring-2 focus:ring-amber-500/10 focus:border-amber-500 rounded-xl pl-9 pr-4 py-1.5 text-xs font-semibold text-slate-700 transition-all placeholder:text-slate-400"
+                className="w-full sm:w-auto bg-slate-50 border border-slate-200 focus:outline-none focus:ring-2 focus:ring-amber-500/10 focus:border-amber-500 rounded-xl pl-9 pr-4 py-2 md:py-1.5 text-xs font-semibold text-slate-700 transition-all placeholder:text-slate-400"
               />
             </div>
           </div>
         </div>
 
         {/* Tab Selection */}
-        <div className="px-6 py-3 bg-white border-b border-slate-200 flex items-center gap-2">
+        <div className="px-4 md:px-6 py-2.5 bg-white border-b border-slate-200 flex items-center gap-2">
           <button 
             onClick={() => setIsHistoryTab(false)}
-            className={`px-4 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 transition-all cursor-pointer ${!isHistoryTab ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/10' : 'bg-slate-50 text-slate-500 hover:bg-slate-100 hover:text-slate-700'}`}
+            className={`flex-1 md:flex-initial justify-center px-4 py-2.5 md:py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 transition-all cursor-pointer ${!isHistoryTab ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/10' : 'bg-slate-50 text-slate-500 hover:bg-slate-100 hover:text-slate-700'}`}
           >
-            🚨 Pendientes de Ruta
+            🚨 Pendientes
             <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${!isHistoryTab ? 'bg-white text-orange-600' : 'bg-slate-200 text-slate-700'}`}>
               {pendingCount}
             </span>
           </button>
           <button 
             onClick={() => setIsHistoryTab(true)}
-            className={`px-4 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 transition-all cursor-pointer ${isHistoryTab ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/10' : 'bg-slate-50 text-slate-500 hover:bg-slate-100 hover:text-slate-700'}`}
+            className={`flex-1 md:flex-initial justify-center px-4 py-2.5 md:py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 transition-all cursor-pointer ${isHistoryTab ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/10' : 'bg-slate-50 text-slate-500 hover:bg-slate-100 hover:text-slate-700'}`}
           >
-            <History className="w-3.5 h-3.5" /> Historial / Resueltas
+            <History className="w-3.5 h-3.5" /> Historial
             <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${isHistoryTab ? 'bg-white text-indigo-600' : 'bg-slate-200 text-slate-700'}`}>
               {completedCount}
             </span>
@@ -466,7 +499,7 @@ export const LogisticsRequestsManager: React.FC<LogisticsRequestsManagerProps> =
                 return (
                   <div 
                     key={req.id} 
-                    className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between text-left relative overflow-hidden"
+                    className="bg-white border border-slate-200 rounded-2xl p-4 md:p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between text-left relative overflow-hidden"
                   >
                     {/* Urgency Glowing top ribbon for pending requests */}
                     {req.status === 'PENDIENTE' && (
@@ -605,18 +638,20 @@ export const LogisticsRequestsManager: React.FC<LogisticsRequestsManagerProps> =
                                   />
                                   <div className="flex justify-end gap-2 text-[10px] font-black">
                                     <button 
+                                      type="button"
                                       onClick={() => {
                                         setCompletingId(null);
                                         setObservationText('');
                                       }}
-                                      className="px-3 py-1.5 bg-white border border-slate-200 text-slate-500 hover:bg-slate-100 rounded-lg cursor-pointer"
+                                      className="px-4 py-2.5 bg-white border border-slate-200 text-slate-500 hover:bg-slate-100 rounded-xl cursor-pointer font-bold"
                                     >
                                       Cancelar
                                     </button>
                                     <button 
+                                      type="button"
                                       disabled={!observationText.trim()}
                                       onClick={() => handleResolveSubmit(req.id)}
-                                      className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg cursor-pointer disabled:opacity-40"
+                                      className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl cursor-pointer disabled:opacity-40 font-bold"
                                     >
                                       Grabar y Completar
                                     </button>
@@ -624,13 +659,14 @@ export const LogisticsRequestsManager: React.FC<LogisticsRequestsManagerProps> =
                                 </div>
                               ) : (
                                 <button 
+                                  type="button"
                                   onClick={() => {
                                     setCompletingId(req.id);
                                     setObservationText('');
                                   }}
-                                  className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-black text-[10px] py-2 px-3 rounded-lg flex items-center justify-center gap-1.5 uppercase tracking-widest transition-all cursor-pointer shadow-md shadow-emerald-500/10"
+                                  className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-black text-xs md:text-[10px] py-3 md:py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 uppercase tracking-widest transition-all cursor-pointer shadow-md shadow-emerald-500/10"
                                 >
-                                  <CheckCircle className="w-3.5 h-3.5" /> Completar Solicitud
+                                  <CheckCircle className="w-4 h-4 md:w-3.5 md:h-3.5" /> Completar Solicitud
                                 </button>
                               )}
                             </div>

@@ -65,6 +65,7 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
   const [selectedRoute, setSelectedRoute] = useState<string>('ALL');
   const [timeSpan, setTimeSpan] = useState<'ALL' | 'LAST_7' | 'LAST_30' | 'THIS_MONTH' | 'UNTIL_YESTERDAY'>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [filtersCollapsed, setFiltersCollapsed] = useState(true);
 
   // Modal detail states for clicking charts
   const [activeDetailFilter, setActiveDetailFilter] = useState<{
@@ -734,8 +735,28 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
           </div>
         </div>
 
+        {/* Mobile Summary & Collapse Toggle Bar */}
+        <div className="md:hidden flex items-center justify-between bg-indigo-50/70 border border-indigo-100 rounded-xl p-3 shadow-sm">
+          <div className="flex flex-col text-left gap-1">
+            <span className="text-[9px] font-bold text-indigo-500 uppercase tracking-widest">Filtros Activos</span>
+            <span className="text-xs font-black text-slate-850 line-clamp-1">
+              {selectedDriver === 'ALL' ? 'Todos' : (driverMap[selectedDriver] || selectedDriver).split(' ')[0]} • {selectedRoute === 'ALL' ? 'Todas' : (routeMap[selectedRoute] || selectedRoute)} • {timeSpan === 'ALL' ? 'Histórico' : timeSpan === 'LAST_7' ? '7 Días' : timeSpan === 'LAST_30' ? '30 Días' : timeSpan === 'THIS_MONTH' ? 'Este Mes' : 'Hasta Ayer'}
+            </span>
+            <div className="flex items-center gap-2 text-[10px] text-slate-500 font-medium mt-0.5">
+              <span>{processedData.length} Rutas</span>
+            </div>
+          </div>
+          <button 
+            onClick={() => setFiltersCollapsed(!filtersCollapsed)}
+            className="flex items-center gap-1.5 px-3 py-2 bg-indigo-600 text-white font-extrabold text-[10px] uppercase rounded-lg shadow-md active:scale-95 transition-all cursor-pointer shrink-0"
+          >
+            <span>{filtersCollapsed ? 'Filtrar' : 'Ocultar'}</span>
+            {filtersCollapsed ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
+          </button>
+        </div>
+
         {/* Filters Panel */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 bg-slate-50/50 p-4 rounded-2xl border border-slate-100">
+        <div className={`grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 bg-slate-50/50 p-4 rounded-2xl border border-slate-100 ${filtersCollapsed ? 'hidden md:grid' : 'grid'}`}>
           {/* Driver filter */}
           <div className="flex flex-col gap-1 text-left">
             <span className="text-[9px] font-extrabold uppercase text-slate-400 tracking-wider">Filtrar por Chofer</span>

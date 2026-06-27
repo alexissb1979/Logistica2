@@ -3,7 +3,7 @@ import {
   Upload, FileText, Search, Save, Calendar as CalendarIcon, MapPin, 
   Info, Trash2, Edit2, Truck, User, List, ArrowUp, ArrowDown, 
   ClipboardList, Printer, AlertCircle, AlertTriangle, RotateCcw, Lock, LogOut, Users, Shield, Loader, X, Plus, BarChart3,
-  ExternalLink, Menu, ChevronDown, ChevronUp
+  ExternalLink, Menu, ChevronDown, ChevronUp, Clock
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import Calendar from 'react-calendar';
@@ -289,6 +289,25 @@ export default function App() {
   // States for Resumen de Rutas search
   const [resumenSearch, setResumenSearch] = useState('');
   const [resumenDate, setResumenDate] = useState('');
+  const [resumenFiltersCollapsed, setResumenFiltersCollapsed] = useState(true);
+  const [expandedResumenId, setExpandedResumenId] = useState<string | null>(null);
+
+  // States for global folio / guías search in header
+  const [globalFolioSearch, setGlobalFolioSearch] = useState('');
+  const [showGlobalSearchResults, setShowGlobalSearchResults] = useState(false);
+  const globalSearchRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (globalSearchRef.current && !globalSearchRef.current.contains(event.target as Node)) {
+        setShowGlobalSearchResults(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
 
   const [hrSelectedRoute, setHrSelectedRoute] = useState<string>('');
   const [hrSelectedDate, setHrSelectedDate] = useState<string>(getLocalDateString());
@@ -324,6 +343,59 @@ export default function App() {
     });
     return map;
   }, [vehicles]);
+
+  const matchingGlobalDocuments = useMemo(() => {
+    const queryStr = globalFolioSearch.trim().toLowerCase();
+    if (queryStr.length < 2) return [];
+
+    const results: Array<{
+      manifest: LogisticsManifest;
+      doc: any;
+      routeLabel: string;
+    }> = [];
+
+    (Object.values(manifests) as LogisticsManifest[]).forEach((m) => {
+      if (!m.documentsSnapshot) return;
+      m.documentsSnapshot.forEach((d) => {
+        const guideNo = (d.guideNumber || '').toLowerCase();
+        const docId = (d.id || '').toLowerCase();
+        const rawId = (d.id || '').replace('-ADD-', '-').toLowerCase();
+        const clientName = (d.razonSocial || '').toLowerCase();
+        const docType = (d.tipo || '').toLowerCase();
+        
+        const matchesGuide = guideNo.includes(queryStr);
+        const matchesDocId = docId.includes(queryStr) || rawId.includes(queryStr);
+        const matchesFullId = `${docType}-${docId}`.includes(queryStr) || `${docType} ${docId}`.includes(queryStr) || `${docType}-${rawId}`.includes(queryStr);
+        const matchesClient = clientName.includes(queryStr);
+
+        if (matchesGuide || matchesDocId || matchesFullId || matchesClient) {
+          const routeLabel = routeMap[m.routeId || ''] || 'Ruta sin nombre';
+          results.push({
+            manifest: m,
+            doc: d,
+            routeLabel,
+          });
+        }
+      });
+    });
+
+    return results.sort((a, b) => {
+      const aId = (a.doc.id || '').toLowerCase();
+      const bId = (b.doc.id || '').toLowerCase();
+      const aGuide = (a.doc.guideNumber || '').toLowerCase();
+      const bGuide = (b.doc.guideNumber || '').toLowerCase();
+
+      const aExact = aId === queryStr || aGuide === queryStr;
+      const bExact = bId === queryStr || bGuide === queryStr;
+
+      if (aExact && !bExact) return -1;
+      if (!aExact && bExact) return 1;
+
+      const dateA = a.manifest.date || '';
+      const dateB = b.manifest.date || '';
+      return dateB.localeCompare(dateA);
+    }).slice(0, 10);
+  }, [manifests, globalFolioSearch, routeMap]);
 
   const mergedDocuments = useMemo(() => {
     return allDocuments.map(doc => ({
@@ -2976,6 +3048,104 @@ export default function App() {
             </div>
           </div>
 
+          {/* Buscador de Folios / Guías para Desktop */}
+          <div ref={globalSearchRef} className="relative mx-4 hidden md:block w-72 lg:w-80 z-50">
+            <div className="relative flex items-center bg-slate-800 hover:bg-slate-755 border border-slate-700 rounded-xl px-3 py-1.5 transition-all text-xs focus-within:ring-2 focus-within:ring-indigo-500/50 focus-within:border-indigo-500">
+              <Search className="w-4 h-4 text-slate-400 mr-2 shrink-0" />
+              <input 
+                type="text"
+                placeholder="Buscar folio (NV, OC, Guía)..."
+                className="bg-transparent text-white placeholder-slate-400 outline-none w-full font-sans font-medium"
+                value={globalFolioSearch}
+                onFocus={() => setShowGlobalSearchResults(true)}
+                onChange={(e) => {
+                  setGlobalFolioSearch(e.target.value);
+                  setShowGlobalSearchResults(true);
+                }}
+              />
+              {globalFolioSearch && (
+                <button 
+                  type="button" 
+                  onClick={() => { setGlobalFolioSearch(''); setShowGlobalSearchResults(false); }}
+                  className="text-slate-400 hover:text-white ml-1 cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+            
+            {showGlobalSearchResults && globalFolioSearch.trim().length >= 2 && (
+              <div className="absolute top-full left-0 right-0 mt-2 bg-white text-slate-800 rounded-xl shadow-2xl border border-slate-200/90 z-[100] max-h-[360px] overflow-y-auto overflow-x-hidden p-1.5 divide-y divide-slate-100 flex flex-col text-left">
+                {matchingGlobalDocuments.length > 0 ? (
+                  matchingGlobalDocuments.map(({ manifest, doc, routeLabel }, idx) => {
+                    const isNV = doc.tipo === 'NV';
+                    const formattedId = formatDocId(doc.tipo, doc.id);
+                    return (
+                      <button
+                        key={`${manifest.id}_${doc.id}_${idx}`}
+                        type="button"
+                        onClick={() => {
+                          setShowManifestDetailId(manifest.id);
+                          setShowGlobalSearchResults(false);
+                          setGlobalFolioSearch('');
+                        }}
+                        className="w-full text-left p-2.5 hover:bg-indigo-50/50 rounded-lg transition-colors flex flex-col gap-1 group cursor-pointer"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className={`text-[11px] font-black font-mono border px-1.5 py-0.5 rounded ${
+                            isNV ? 'bg-indigo-50 text-indigo-700 border-indigo-100' : 'bg-teal-50 text-teal-700 border-teal-100'
+                          }`}>
+                            {formattedId}
+                          </span>
+                          {doc.guideNumber && (
+                            <span className="text-[10px] text-slate-500 font-mono font-bold bg-slate-50 border border-slate-100 rounded px-1.5 py-0.5">
+                              Guía: {doc.guideNumber}
+                            </span>
+                          )}
+                          <span className="text-[10px] text-white font-extrabold px-1.5 py-0.5 bg-slate-800 rounded font-mono">
+                            HR-{manifest.routeNumber ?? '1001'}
+                          </span>
+                        </div>
+                        
+                        <p className="text-[11px] text-slate-700 font-bold truncate leading-tight group-hover:text-indigo-900">
+                          👤 {doc.razonSocial || 'Cliente sin nombre'}
+                        </p>
+                        
+                        <div className="flex items-center justify-between text-[10px] text-slate-400 font-medium">
+                          <span className="truncate max-w-[150px]">🚛 {routeLabel}</span>
+                          <span className="font-mono">{manifest.date ? new Date(manifest.date + 'T12:00:00').toLocaleDateString('es-CL') : '-'}</span>
+                        </div>
+                        
+                        {doc.trackingStatus && (
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <span className={`text-[9px] font-extrabold px-1.5 py-0.2 rounded-full border ${
+                              doc.trackingStatus === 'ENTREGADO' || doc.trackingStatus === 'RETIRADO'
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
+                                : doc.trackingStatus === 'NO ENTREGADO' || doc.trackingStatus === 'NO RETIRADO'
+                                ? 'bg-rose-50 text-rose-700 border-rose-100'
+                                : 'bg-amber-50 text-amber-700 border-amber-100'
+                            }`}>
+                              {doc.trackingStatus}
+                            </span>
+                            {doc.failedReason && (
+                              <span className="text-[9px] font-bold text-slate-400 max-w-[160px] truncate">
+                                ({doc.failedReason})
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })
+                ) : (
+                  <div className="p-4 text-center text-slate-400 text-xs font-medium">
+                    No se encontraron guías/folios con "{globalFolioSearch}"
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
           <div className="flex items-center gap-3 border-l border-slate-700 pl-4 text-neutral-200 md:hidden">
             <button 
               onClick={handleSignOut}
@@ -2988,6 +3158,104 @@ export default function App() {
         </div>
           
         <div className={`flex flex-col lg:flex-row lg:items-center w-full lg:w-auto gap-4 pb-4 lg:pb-0 ${mobileMenuOpen ? 'block' : 'hidden lg:flex'}`}>
+          {/* Buscador de Folios / Guías para Mobile */}
+          <div className="block md:hidden px-4 pt-2 relative z-50">
+            <div className="relative flex items-center bg-slate-800 hover:bg-slate-755 border border-slate-700 rounded-xl px-3 py-2.5 transition-all text-xs focus-within:ring-2 focus-within:ring-indigo-500/50 focus-within:border-indigo-500">
+              <Search className="w-4 h-4 text-slate-400 mr-2 shrink-0" />
+              <input 
+                type="text"
+                placeholder="Buscar folio (NV, OC, Guía)..."
+                className="bg-transparent text-white placeholder-slate-400 outline-none w-full font-sans font-medium"
+                value={globalFolioSearch}
+                onFocus={() => setShowGlobalSearchResults(true)}
+                onChange={(e) => {
+                  setGlobalFolioSearch(e.target.value);
+                  setShowGlobalSearchResults(true);
+                }}
+              />
+              {globalFolioSearch && (
+                <button 
+                  type="button" 
+                  onClick={() => { setGlobalFolioSearch(''); setShowGlobalSearchResults(false); }}
+                  className="text-slate-400 hover:text-white ml-1 cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+            
+            {showGlobalSearchResults && globalFolioSearch.trim().length >= 2 && (
+              <div className="absolute top-full left-4 right-4 mt-2 bg-white text-slate-800 rounded-xl shadow-2xl border border-slate-200/90 z-[100] max-h-[300px] overflow-y-auto overflow-x-hidden p-1.5 divide-y divide-slate-100 flex flex-col text-left">
+                {matchingGlobalDocuments.length > 0 ? (
+                  matchingGlobalDocuments.map(({ manifest, doc, routeLabel }, idx) => {
+                    const isNV = doc.tipo === 'NV';
+                    const formattedId = formatDocId(doc.tipo, doc.id);
+                    return (
+                      <button
+                        key={`mobile_${manifest.id}_${doc.id}_${idx}`}
+                        type="button"
+                        onClick={() => {
+                          setShowManifestDetailId(manifest.id);
+                          setShowGlobalSearchResults(false);
+                          setGlobalFolioSearch('');
+                          setMobileMenuOpen(false);
+                        }}
+                        className="w-full text-left p-2.5 hover:bg-indigo-50/50 rounded-lg transition-colors flex flex-col gap-1 group cursor-pointer"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className={`text-[11px] font-black font-mono border px-1.5 py-0.5 rounded ${
+                            isNV ? 'bg-indigo-50 text-indigo-700 border-indigo-100' : 'bg-teal-50 text-teal-700 border-teal-100'
+                          }`}>
+                            {formattedId}
+                          </span>
+                          {doc.guideNumber && (
+                            <span className="text-[10px] text-slate-500 font-mono font-bold bg-slate-50 border border-slate-100 rounded px-1.5 py-0.5">
+                              Guía: {doc.guideNumber}
+                            </span>
+                          )}
+                          <span className="text-[10px] text-white font-extrabold px-1.5 py-0.5 bg-slate-800 rounded font-mono">
+                            HR-{manifest.routeNumber ?? '1001'}
+                          </span>
+                        </div>
+                        
+                        <p className="text-[11px] text-slate-700 font-bold truncate leading-tight group-hover:text-indigo-900">
+                          👤 {doc.razonSocial || 'Cliente sin nombre'}
+                        </p>
+                        
+                        <div className="flex items-center justify-between text-[10px] text-slate-400 font-medium">
+                          <span className="truncate max-w-[150px]">🚛 {routeLabel}</span>
+                          <span className="font-mono">{manifest.date ? new Date(manifest.date + 'T12:00:00').toLocaleDateString('es-CL') : '-'}</span>
+                        </div>
+                        
+                        {doc.trackingStatus && (
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <span className={`text-[9px] font-extrabold px-1.5 py-0.2 rounded-full border ${
+                              doc.trackingStatus === 'ENTREGADO' || doc.trackingStatus === 'RETIRADO'
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
+                                : doc.trackingStatus === 'NO ENTREGADO' || doc.trackingStatus === 'NO RETIRADO'
+                                ? 'bg-rose-50 text-rose-700 border-rose-100'
+                                : 'bg-amber-50 text-amber-700 border-amber-100'
+                            }`}>
+                              {doc.trackingStatus}
+                            </span>
+                            {doc.failedReason && (
+                              <span className="text-[9px] font-bold text-slate-400 max-w-[160px] truncate">
+                                ({doc.failedReason})
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })
+                ) : (
+                  <div className="p-4 text-center text-slate-400 text-xs font-medium">
+                    No se encontraron guías/folios con "{globalFolioSearch}"
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
           <nav className="flex flex-col lg:flex-row lg:items-center bg-slate-800 rounded-lg p-1 lg:ml-4 border border-slate-700 gap-1 lg:gap-0" id="navigation-bar">
             {userProfile?.permissions.canViewPlanning && (
               <button 
@@ -4313,53 +4581,79 @@ export default function App() {
         {/* Saved Manifests Sheet tab */}
         {activeTab === 'resumenRutas' && (
           <div className="flex-1 flex flex-col overflow-hidden bg-slate-50 animate-fade-in" id="resumen-rutas-panel">
-            <div className="p-6 bg-white border-b border-slate-200 shadow-sm flex flex-col gap-4">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="p-4 sm:p-6 bg-white border-b border-slate-200 shadow-sm flex flex-col gap-3 sm:gap-4">
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                 <div>
-                  <h2 className="text-lg font-bold text-slate-800 tracking-tight flex items-center gap-2">
+                  <h2 className="text-base sm:text-lg font-bold text-slate-800 tracking-tight flex items-center gap-2">
                     <Truck className="w-5 h-5 text-indigo-600" /> Control y Resumen de Rutas Grabadas
                   </h2>
-                  <p className="text-xs text-slate-500">Configure horarios, entregas pendientes y genere reportes definitivos.</p>
+                  <p className="text-[10px] sm:text-xs text-slate-500">Configure horarios, entregas pendientes y genere reportes definitivos.</p>
                 </div>
-                
-                <div className="flex flex-wrap items-center gap-3">
-                  <div className="relative">
+              </div>
+
+              {/* Mobile Summary & Collapse Toggle Bar */}
+              <div className="md:hidden flex items-center justify-between bg-indigo-50/70 border border-indigo-100 rounded-xl p-3.5 shadow-sm">
+                <div className="flex flex-col text-left gap-1">
+                  <span className="text-[9px] font-bold text-indigo-500 uppercase tracking-widest">Filtros de Búsqueda</span>
+                  <span className="text-xs font-black text-slate-850">
+                    {resumenDate ? new Date(resumenDate + 'T12:00:00').toLocaleDateString('es-CL') : 'Todos los días'} 
+                    {resumenSearch ? ` • "${resumenSearch}"` : ''}
+                  </span>
+                  <div className="flex items-center gap-2 text-[10px] text-slate-500 font-medium mt-0.5">
+                    <span>{filteredResumenManifests.length} Rutas Cargadas</span>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setResumenFiltersCollapsed(!resumenFiltersCollapsed)}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-indigo-600 text-white font-extrabold text-[10px] uppercase rounded-lg shadow-md active:scale-95 transition-all cursor-pointer shrink-0"
+                >
+                  <span>{resumenFiltersCollapsed ? 'Buscar' : 'Ocultar'}</span>
+                  {resumenFiltersCollapsed ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
+                </button>
+              </div>
+
+              {/* Collapsible filters block */}
+              <div className={`flex-col md:flex-row md:items-center justify-between gap-4 ${resumenFiltersCollapsed ? 'hidden md:flex' : 'flex'}`}>
+                <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-3">
+                  <div className="relative w-full sm:w-64">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
                     <input 
                       type="text" 
-                      placeholder="Identificador, chofer, patente, NV, OC, folio..." 
-                      className="text-xs pl-9 pr-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 bg-slate-50 w-64 font-medium"
+                      placeholder="Identificador, chofer, patente, NV, OC..." 
+                      className="text-xs pl-9 pr-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 bg-slate-50 w-full font-medium"
                       value={resumenSearch}
                       onChange={(e) => setResumenSearch(e.target.value)}
                     />
                   </div>
                   
-                  <input 
-                    type="date"
-                    className="text-xs px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 bg-slate-50 font-bold"
-                    value={resumenDate}
-                    onChange={(e) => setResumenDate(e.target.value)}
-                  />
+                  <div className="flex items-center gap-2 w-full sm:w-auto">
+                    <input 
+                      type="date"
+                      className="text-xs px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 bg-slate-50 font-bold flex-1 sm:flex-initial"
+                      value={resumenDate}
+                      onChange={(e) => setResumenDate(e.target.value)}
+                    />
 
-                  <button
-                    onClick={() => {
-                      const today = getLocalDateString();
-                      setResumenDate(resumenDate === today ? '' : today);
-                    }}
-                    className={`text-xs font-black px-3 py-2 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer border uppercase tracking-wider text-[11px] ${
-                      resumenDate === getLocalDateString()
-                        ? 'bg-indigo-50 border-indigo-200 text-indigo-700 shadow-sm'
-                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-                    }`}
-                    title="Filtrar rutas programadas para el día de hoy"
-                  >
-                    <CalendarIcon className="w-3.5 h-3.5 text-indigo-500" /> Rutas de Hoy
-                  </button>
+                    <button
+                      onClick={() => {
+                        const today = getLocalDateString();
+                        setResumenDate(resumenDate === today ? '' : today);
+                      }}
+                      className={`text-xs font-black px-3 py-2 rounded-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer border uppercase tracking-wider text-[11px] flex-1 sm:flex-initial ${
+                        resumenDate === getLocalDateString()
+                          ? 'bg-indigo-50 border-indigo-200 text-indigo-700 shadow-sm'
+                          : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                      }`}
+                      title="Filtrar rutas programadas para el día de hoy"
+                    >
+                      <CalendarIcon className="w-3.5 h-3.5 text-indigo-500" /> Hoy
+                    </button>
+                  </div>
 
                   {resumenDate && (
                     <button 
                       onClick={() => setResumenDate('')}
-                      className="text-xs font-bold text-rose-500 hover:text-rose-600 px-2 py-1 cursor-pointer"
+                      className="text-xs font-bold text-rose-500 hover:text-rose-600 px-2 py-1 cursor-pointer text-center"
                     >
                       Limpiar Filtro
                     </button>
@@ -4370,7 +4664,7 @@ export default function App() {
                       setConsolidatedReportDate(resumenDate || getLocalDateString());
                       setIsConsolidatedReportModalOpen(true);
                     }}
-                    className="text-xs bg-indigo-600 hover:bg-indigo-700 text-white font-black px-4 py-2 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer shadow-sm active:scale-95 hover:shadow uppercase tracking-wider text-[11px]"
+                    className="text-xs bg-indigo-600 hover:bg-indigo-700 text-white font-black px-4 py-2.5 sm:py-2 rounded-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-sm active:scale-95 hover:shadow uppercase tracking-wider text-[11px] w-full sm:w-auto"
                     title="Genere un reporte consolidado de las rutas para compartir o imprimir"
                   >
                     <FileText className="w-3.5 h-3.5" /> Reporte Consolidado
@@ -4379,216 +4673,470 @@ export default function App() {
               </div>
             </div>
 
-            <div className="flex-1 overflow-auto p-6" id="resumen-rutas-table">
+            <div className="flex-1 overflow-auto p-4 sm:p-6" id="resumen-rutas-table">
               {filteredResumenManifests.length > 0 ? (
-                <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden overflow-x-auto">
-                  <table className="w-full text-left border-collapse min-w-[1000px]">
-                    <thead className="bg-slate-50 border-b border-slate-200">
-                      <tr className="text-[10px] font-normal text-slate-400 uppercase tracking-widest">
-                        <th className="px-4 py-4 leading-tight">Hoja de Ruta</th>
-                        <th className="px-4 py-4 leading-tight w-14 text-center">Fecha Despacho</th>
-                        <th className="px-4 py-4 leading-tight min-w-[120px]">Ruta / Destino</th>
-                        <th className="px-4 py-4 leading-tight w-64">Documentos / Guías</th>
-                        <th className="px-4 py-4 leading-tight min-w-[140px]">Chofer/Vehículo</th>
-                        <th className="px-4 py-4 leading-tight min-w-[160px]">Horarios</th>
-                        <th className="px-4 py-4 leading-tight w-32">Kilometraje (Ini/Fin)</th>
-                        <th className="px-4 py-4 leading-tight text-center">KPI Seguimiento</th>
-                        <th className="px-4 py-4 leading-tight text-center">Progreso</th>
-                        <th className="px-4 py-4 leading-tight text-right">Total Carga</th>
-                        <th className="px-4 py-4 leading-tight text-right">Acciones</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 text-xs">
-                      {filteredResumenManifests.map((manifest) => {
-                        const mId = manifest.id;
-                        const rName = routeMap[manifest.routeId || ''] || 'Sin nombre';
-                        const dName = driverMap[manifest.driverId || ''] || 'No asignado';
-                        const vDesc = vehicleMap[manifest.vehicleId || ''] || 'No asignado';
-                        const totalPoints = manifest.documentsSnapshot?.length ?? 0;
-                        const completedPoints = manifest.documentsSnapshot?.filter(d => 
-                          d.trackingStatus === 'ENTREGADO' || 
-                          d.trackingStatus === 'RETIRADO' || 
-                          d.trackingStatus === 'NO ENTREGADO' || 
-                          d.trackingStatus === 'NO RETIRADO'
-                        ).length ?? 0;
-                        const pendingPoints = totalPoints - completedPoints;
-                        const totalEstVal = manifest.documentsSnapshot?.reduce((s,d) => d.tipo === 'OC' ? s : s + (d.totalAmount ?? d.totalPendiente), 0) || 0;
-                        
-                        const hasMissingFailedReasons = manifest.documentsSnapshot?.some(d => {
-                          const isFailed = d.trackingStatus === 'NO ENTREGADO' || d.trackingStatus === 'NO RETIRADO';
-                          if (!isFailed) return false;
-                          if (!d.failedReason) return true;
+                <>
+                  {/* Vista Desktop: Tabla completa */}
+                  <div className="hidden md:block bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden overflow-x-auto">
+                    <table className="w-full text-left border-collapse min-w-[1000px]">
+                      <thead className="bg-slate-50 border-b border-slate-200">
+                        <tr className="text-[10px] font-normal text-slate-400 uppercase tracking-widest">
+                          <th className="px-4 py-4 leading-tight">Hoja de Ruta</th>
+                          <th className="px-4 py-4 leading-tight w-14 text-center">Fecha Despacho</th>
+                          <th className="px-4 py-4 leading-tight min-w-[120px]">Ruta / Destino</th>
+                          <th className="px-4 py-4 leading-tight w-64">Documentos / Guías</th>
+                          <th className="px-4 py-4 leading-tight min-w-[140px]">Chofer/Vehículo</th>
+                          <th className="px-4 py-4 leading-tight min-w-[160px]">Horarios</th>
+                          <th className="px-4 py-4 leading-tight w-32">Kilometraje (Ini/Fin)</th>
+                          <th className="px-4 py-4 leading-tight text-center">KPI Seguimiento</th>
+                          <th className="px-4 py-4 leading-tight text-center">Progreso</th>
+                          <th className="px-4 py-4 leading-tight text-right">Total Carga</th>
+                          <th className="px-4 py-4 leading-tight text-right">Acciones</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 text-xs">
+                        {filteredResumenManifests.map((manifest) => {
+                          const mId = manifest.id;
+                          const rName = routeMap[manifest.routeId || ''] || 'Sin nombre';
+                          const dName = driverMap[manifest.driverId || ''] || 'No asignado';
+                          const vDesc = vehicleMap[manifest.vehicleId || ''] || 'No asignado';
+                          const totalPoints = manifest.documentsSnapshot?.length ?? 0;
+                          const completedPoints = manifest.documentsSnapshot?.filter(d => 
+                            d.trackingStatus === 'ENTREGADO' || 
+                            d.trackingStatus === 'RETIRADO' || 
+                            d.trackingStatus === 'NO ENTREGADO' || 
+                            d.trackingStatus === 'NO RETIRADO'
+                          ).length ?? 0;
+                          const pendingPoints = totalPoints - completedPoints;
+                          const totalEstVal = manifest.documentsSnapshot?.reduce((s,d) => d.tipo === 'OC' ? s : s + (d.totalAmount ?? d.totalPendiente), 0) || 0;
                           
-                          if (d.trackingStatus === 'NO RETIRADO') {
-                            return !['SIN STOCK', 'POR HORARIO', 'DESCORDINACION'].includes(d.failedReason);
-                          } else {
-                            return !['POR HORARIO', 'CLIENTE NO RECIBE', 'NO CARGADO'].includes(d.failedReason);
-                          }
-                        }) ?? false;
-                        const isTrackingComplete = totalPoints > 0 && totalPoints === completedPoints;
-                        const isReadyToClose = isTrackingComplete && !hasMissingFailedReasons;
-                        const trackingProgress = totalPoints > 0 ? Math.round((completedPoints / totalPoints) * 100) : 0;
+                          const hasMissingFailedReasons = manifest.documentsSnapshot?.some(d => {
+                            const isFailed = d.trackingStatus === 'NO ENTREGADO' || d.trackingStatus === 'NO RETIRADO';
+                            if (!isFailed) return false;
+                            if (!d.failedReason) return true;
+                            
+                            if (d.trackingStatus === 'NO RETIRADO') {
+                              return !['SIN STOCK', 'POR HORARIO', 'DESCORDINACION'].includes(d.failedReason);
+                            } else {
+                              return !['POR HORARIO', 'CLIENTE NO RECIBE', 'NO CARGADO'].includes(d.failedReason);
+                            }
+                          }) ?? false;
+                          const isTrackingComplete = totalPoints > 0 && totalPoints === completedPoints;
+                          const isReadyToClose = isTrackingComplete && !hasMissingFailedReasons;
+                          const trackingProgress = totalPoints > 0 ? Math.round((completedPoints / totalPoints) * 100) : 0;
 
-                        return (
-                          <tr key={mId} className="hover:bg-slate-50/80 transition-colors group">
-                            <td className="px-4 py-4">
-                              <button 
-                                onClick={() => setShowManifestDetailId(mId)}
-                                className="flex items-center gap-3 hover:opacity-80 transition-opacity text-left cursor-pointer"
-                              >
-                                <span className="text-sm font-black px-3 py-2 bg-slate-900 text-white rounded-xl font-mono uppercase tracking-tighter active:scale-95 transition-transform shadow-lg ring-1 ring-white/10 group-hover:scale-105">
-                                  HR-{manifest.routeNumber ?? '1001'}
-                                </span>
-                                <div className="flex flex-col">
-                                  <p className="text-[14px] font-black text-slate-900 leading-none tracking-tight">{rName}</p>
-                                </div>
-                              </button>
-                            </td>
-                            <td className="px-4 py-4">
-                              <p className="text-[10px] text-slate-600 font-normal font-mono whitespace-nowrap">
-                                {manifest.date ? new Date(manifest.date + 'T12:00:00').toLocaleDateString('es-CL') : '-'}
-                              </p>
-                            </td>
-                            <td className="px-4 py-4">
-                              <h3 className="font-normal text-slate-800 text-[11px] leading-tight max-w-[100px]">{rName}</h3>
-                            </td>
-                            <td className="px-4 py-4">
-                              <div className="flex flex-wrap gap-1 max-w-[280px]">
-                                {(() => {
-                                  const uniqueItems = new Map();
-                                  (manifest.documentsSnapshot || []).forEach(d => {
-                                    if (d.tipo === 'OC') {
-                                      const val = formatDocId(d.tipo, d.id);
-                                      uniqueItems.set(val, { type: 'OC', val });
-                                    } else if (d.guideNumber) {
-                                      uniqueItems.set(d.guideNumber, { type: 'NV', val: d.guideNumber });
+                          return (
+                            <tr key={mId} className="hover:bg-slate-50/80 transition-colors group">
+                              <td className="px-4 py-4">
+                                <button 
+                                  type="button"
+                                  onClick={() => setShowManifestDetailId(mId)}
+                                  className="flex items-center gap-3 hover:opacity-80 transition-opacity text-left cursor-pointer font-sans"
+                                >
+                                  <span className="text-sm font-black px-3 py-2 bg-slate-900 text-white rounded-xl font-mono uppercase tracking-tighter active:scale-95 transition-transform shadow-lg ring-1 ring-white/10 group-hover:scale-105">
+                                    HR-{manifest.routeNumber ?? '1001'}
+                                  </span>
+                                  <div className="flex flex-col">
+                                    <p className="text-[14px] font-black text-slate-900 leading-none tracking-tight">{rName}</p>
+                                  </div>
+                                </button>
+                              </td>
+                              <td className="px-4 py-4">
+                                <p className="text-[10px] text-slate-600 font-normal font-mono whitespace-nowrap">
+                                  {manifest.date ? new Date(manifest.date + 'T12:00:00').toLocaleDateString('es-CL') : '-'}
+                                </p>
+                              </td>
+                              <td className="px-4 py-4">
+                                <h3 className="font-normal text-slate-800 text-[11px] leading-tight max-w-[100px]">{rName}</h3>
+                              </td>
+                              <td className="px-4 py-4">
+                                <div className="flex flex-wrap gap-1 max-w-[280px]">
+                                  {(() => {
+                                    const uniqueItems = new Map();
+                                    (manifest.documentsSnapshot || []).forEach(d => {
+                                      if (d.tipo === 'OC') {
+                                        const val = formatDocId(d.tipo, d.id);
+                                        uniqueItems.set(val, { type: 'OC', val });
+                                      } else if (d.guideNumber) {
+                                        uniqueItems.set(d.guideNumber, { type: 'NV', val: d.guideNumber });
+                                      }
+                                    });
+                                    
+                                    if (uniqueItems.size === 0) {
+                                      return <span className="text-[9px] text-slate-300 font-bold italic">Sin guías/OCs</span>;
                                     }
-                                  });
-                                  
-                                  if (uniqueItems.size === 0) {
-                                    return <span className="text-[9px] text-slate-300 font-bold italic">Sin guías/OCs</span>;
-                                  }
 
-                                  return Array.from(uniqueItems.values()).map((item, i) => (
-                                    <span key={i} className={`text-[9px] px-1.5 py-0.5 rounded font-bold font-mono border whitespace-nowrap ${
-                                      item.type === 'OC' 
-                                        ? 'bg-teal-50 text-teal-600 border-teal-200' 
-                                        : 'bg-indigo-50 text-indigo-700 border-indigo-100'
-                                    }`}>
-                                      {item.val}
-                                    </span>
-                                  ));
-                                })()}
-                              </div>
-                            </td>
-                            <td className="px-4 py-4">
-                              <div className="flex flex-col gap-0.5 max-w-[130px]">
-                                <p className="text-[10px] font-normal text-slate-700 truncate" title={dName}>👤 {dName}</p>
-                                <p className="text-[9px] text-slate-500 truncate tracking-tight text-ellipsis" title={vDesc}>🚛 {vDesc}</p>
-                              </div>
-                            </td>
-                            <td className="px-4 py-4">
-                              <div className="flex items-center gap-1.5">
-                                <input 
-                                  type="time" 
-                                  disabled={manifest.logisticsDataSaved}
-                                  className={`bg-transparent border-none p-0 text-[10px] font-normal focus:ring-0 w-[68px] outline-none ${
-                                    manifest.logisticsDataSaved 
-                                      ? 'text-slate-400 cursor-not-allowed opacity-60 font-mono' 
-                                      : 'text-slate-700 hover:bg-slate-100 rounded px-1'
-                                  }`}
-                                  value={manifest.startTime || ''}
-                                  onChange={(e) => handleUpdateManifestField(mId, 'startTime', e.target.value)}
-                                />
-                                <span className="text-slate-300">-</span>
-                                <input 
-                                  type="time" 
-                                  disabled={manifest.logisticsDataSaved}
-                                  className={`bg-transparent border-none p-0 text-[10px] font-normal focus:ring-0 w-[68px] outline-none ${
-                                    manifest.logisticsDataSaved 
-                                      ? 'text-slate-400 cursor-not-allowed opacity-60 font-mono' 
-                                      : 'text-slate-700 hover:bg-slate-100 rounded px-1'
-                                  }`}
-                                  value={manifest.endTime || ''}
-                                  onChange={(e) => handleUpdateManifestField(mId, 'endTime', e.target.value)}
-                                />
-                              </div>
-                            </td>
-                            <td className="px-4 py-4">
-                              <div className="flex items-center gap-1">
-                                <input 
-                                  type="number" 
-                                  disabled={manifest.logisticsDataSaved}
-                                  placeholder="KM Ini"
-                                  className={`bg-transparent border-none p-0 text-[10px] font-normal text-center focus:ring-0 w-12 outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
-                                    manifest.logisticsDataSaved 
-                                      ? 'text-slate-400 cursor-not-allowed opacity-60' 
-                                      : 'text-slate-700 hover:bg-slate-100 rounded'
-                                  }`}
-                                  value={manifest.initialKm ?? ''}
-                                  onChange={(e) => handleUpdateManifestField(mId, 'initialKm', e.target.value === '' ? null : Number(e.target.value))}
-                                />
-                                <span className="text-slate-300">/</span>
-                                <input 
-                                  type="number" 
-                                  disabled={manifest.logisticsDataSaved}
-                                  placeholder="KM Fin"
-                                  className={`bg-transparent border-none p-0 text-[10px] font-normal text-center focus:ring-0 w-12 outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
-                                    manifest.logisticsDataSaved 
-                                      ? 'text-slate-400 cursor-not-allowed opacity-60' 
-                                      : 'text-slate-700 hover:bg-slate-100 rounded'
-                                  }`}
-                                  value={manifest.finalKm ?? ''}
-                                  onChange={(e) => handleUpdateManifestField(mId, 'finalKm', e.target.value === '' ? null : Number(e.target.value))}
-                                />
-                              </div>
-                            </td>
-                            <td className="px-4 py-4 text-center">
-                                <div className="flex items-center justify-center gap-3 min-w-[120px]">
-                                  <div className="flex flex-col items-center">
-                                    <span className="text-[10px] font-black text-slate-800 leading-none">{totalPoints}</span>
-                                    <span className="text-[7px] text-slate-400 font-black uppercase tracking-widest mt-0.5">Total</span>
-                                  </div>
-                                  <div className="w-px h-5 bg-slate-200" />
-                                  <div className="flex flex-col items-center">
-                                    <span className="text-[10px] font-black text-emerald-600 leading-none">{completedPoints}</span>
-                                    <span className="text-[7px] text-emerald-500/50 font-black uppercase tracking-widest mt-0.5">OK</span>
-                                  </div>
-                                  <div className="w-px h-5 bg-slate-200" />
-                                  <div className="flex flex-col items-center">
-                                    <span className={`text-[10px] font-black leading-none ${pendingPoints > 0 ? 'text-rose-600' : 'text-slate-300'}`}>{pendingPoints}</span>
-                                    <span className={`text-[7px] font-black uppercase tracking-widest mt-0.5 ${pendingPoints > 0 ? 'text-rose-400/50' : 'text-slate-300'}`}>Pend</span>
-                                  </div>
+                                    return Array.from(uniqueItems.values()).map((item, i) => (
+                                      <span key={i} className={`text-[9px] px-1.5 py-0.5 rounded font-bold font-mono border whitespace-nowrap ${
+                                        item.type === 'OC' 
+                                          ? 'bg-teal-50 text-teal-600 border-teal-200' 
+                                          : 'bg-indigo-50 text-indigo-700 border-indigo-100'
+                                      }`}>
+                                        {item.val}
+                                      </span>
+                                    ));
+                                  })()}
                                 </div>
-                            </td>
-                            <td className="px-4 py-4">
-                              <div className="flex flex-col items-center gap-1 min-w-[80px]">
-                                <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden border border-slate-200">
-                                  <div 
-                                    className={`h-full transition-all duration-500 ${isReadyToClose ? 'bg-emerald-500' : isTrackingComplete ? 'bg-amber-500' : 'bg-indigo-500'}`}
-                                    style={{ width: `${trackingProgress}%` }}
+                              </td>
+                              <td className="px-4 py-4">
+                                <div className="flex flex-col gap-0.5 max-w-[130px]">
+                                  <p className="text-[10px] font-normal text-slate-700 truncate" title={dName}>👤 {dName}</p>
+                                  <p className="text-[9px] text-slate-500 truncate tracking-tight text-ellipsis" title={vDesc}>🚛 {vDesc}</p>
+                                </div>
+                              </td>
+                              <td className="px-4 py-4">
+                                <div className="flex items-center gap-1.5">
+                                  <input 
+                                    type="time" 
+                                    disabled={manifest.logisticsDataSaved}
+                                    className={`bg-transparent border-none p-0 text-[10px] font-normal focus:ring-0 w-[68px] outline-none ${
+                                      manifest.logisticsDataSaved 
+                                        ? 'text-slate-400 cursor-not-allowed opacity-60 font-mono' 
+                                        : 'text-slate-700 hover:bg-slate-100 rounded px-1'
+                                    }`}
+                                    value={manifest.startTime || ''}
+                                    onChange={(e) => handleUpdateManifestField(mId, 'startTime', e.target.value)}
+                                  />
+                                  <span className="text-slate-300">-</span>
+                                  <input 
+                                    type="time" 
+                                    disabled={manifest.logisticsDataSaved}
+                                    className={`bg-transparent border-none p-0 text-[10px] font-normal focus:ring-0 w-[68px] outline-none ${
+                                      manifest.logisticsDataSaved 
+                                        ? 'text-slate-400 cursor-not-allowed opacity-60 font-mono' 
+                                        : 'text-slate-700 hover:bg-slate-100 rounded px-1'
+                                    }`}
+                                    value={manifest.endTime || ''}
+                                    onChange={(e) => handleUpdateManifestField(mId, 'endTime', e.target.value)}
                                   />
                                 </div>
-                                <span className={`text-[9px] font-bold ${isReadyToClose ? 'text-emerald-600' : isTrackingComplete ? 'text-amber-600 animate-pulse' : 'text-slate-500 font-mono italic'}`}>
-                                  {isReadyToClose ? 'COMPLETO' : isTrackingComplete ? 'FALTA MOTIVO' : `${trackingProgress}%`}
+                              </td>
+                              <td className="px-4 py-4">
+                                <div className="flex items-center gap-1">
+                                  <input 
+                                    type="number" 
+                                    disabled={manifest.logisticsDataSaved}
+                                    placeholder="KM Ini"
+                                    className={`bg-transparent border-none p-0 text-[10px] font-normal text-center focus:ring-0 w-12 outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
+                                      manifest.logisticsDataSaved 
+                                        ? 'text-slate-400 cursor-not-allowed opacity-60' 
+                                        : 'text-slate-700 hover:bg-slate-100 rounded'
+                                    }`}
+                                    value={manifest.initialKm ?? ''}
+                                    onChange={(e) => handleUpdateManifestField(mId, 'initialKm', e.target.value === '' ? null : Number(e.target.value))}
+                                  />
+                                  <span className="text-slate-300">/</span>
+                                  <input 
+                                    type="number" 
+                                    disabled={manifest.logisticsDataSaved}
+                                    placeholder="KM Fin"
+                                    className={`bg-transparent border-none p-0 text-[10px] font-normal text-center focus:ring-0 w-12 outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
+                                      manifest.logisticsDataSaved 
+                                        ? 'text-slate-400 cursor-not-allowed opacity-60' 
+                                        : 'text-slate-700 hover:bg-slate-100 rounded'
+                                    }`}
+                                    value={manifest.finalKm ?? ''}
+                                    onChange={(e) => handleUpdateManifestField(mId, 'finalKm', e.target.value === '' ? null : Number(e.target.value))}
+                                  />
+                                </div>
+                              </td>
+                              <td className="px-4 py-4 text-center">
+                                  <div className="flex items-center justify-center gap-3 min-w-[120px]">
+                                    <div className="flex flex-col items-center">
+                                      <span className="text-[10px] font-black text-slate-800 leading-none">{totalPoints}</span>
+                                      <span className="text-[7px] text-slate-400 font-black uppercase tracking-widest mt-0.5">Total</span>
+                                    </div>
+                                    <div className="w-px h-5 bg-slate-200" />
+                                    <div className="flex flex-col items-center">
+                                      <span className="text-[10px] font-black text-emerald-600 leading-none">{completedPoints}</span>
+                                      <span className="text-[7px] text-emerald-500/50 font-black uppercase tracking-widest mt-0.5">OK</span>
+                                    </div>
+                                    <div className="w-px h-5 bg-slate-200" />
+                                    <div className="flex flex-col items-center">
+                                      <span className={`text-[10px] font-black leading-none ${pendingPoints > 0 ? 'text-rose-600' : 'text-slate-300'}`}>{pendingPoints}</span>
+                                      <span className={`text-[7px] font-black uppercase tracking-widest mt-0.5 ${pendingPoints > 0 ? 'text-rose-400/50' : 'text-slate-300'}`}>Pend</span>
+                                    </div>
+                                  </div>
+                              </td>
+                              <td className="px-4 py-4">
+                                <div className="flex flex-col items-center gap-1 min-w-[80px]">
+                                  <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden border border-slate-200">
+                                    <div 
+                                      className={`h-full transition-all duration-500 ${isReadyToClose ? 'bg-emerald-500' : isTrackingComplete ? 'bg-amber-500' : 'bg-indigo-500'}`}
+                                      style={{ width: `${trackingProgress}%` }}
+                                    />
+                                  </div>
+                                  <span className={`text-[9px] font-bold ${isReadyToClose ? 'text-emerald-600' : isTrackingComplete ? 'text-amber-600 animate-pulse' : 'text-slate-500 font-mono italic'}`}>
+                                    {isReadyToClose ? 'COMPLETO' : isTrackingComplete ? 'FALTA MOTIVO' : `${trackingProgress}%`}
+                                  </span>
+                                </div>
+                              </td>
+                              <td className="px-4 py-4 text-right">
+                                <p className="font-bold text-indigo-700 font-mono">${Math.round(totalEstVal).toLocaleString('es-CL')}</p>
+                                <p className="text-slate-400 font-mono text-[9px]">{manifest.documentsSnapshot?.length ?? 0} doctos</p>
+                              </td>
+                              <td className="px-4 py-4">
+                                <div className="flex items-center justify-end gap-1">
+                                  {manifest.logisticsDataSaved ? (
+                                    <span 
+                                      className="p-2 text-emerald-600 bg-emerald-50 rounded-lg flex items-center justify-center"
+                                      title="Datos guardados y bloqueados de edición (reabra la ruta para poder editar de nuevo)"
+                                    >
+                                      <Lock className="w-4 h-4 text-emerald-600" />
+                                    </span>
+                                  ) : (
+                                    <button 
+                                      type="button"
+                                      onClick={() => {
+                                        if (!isTrackingComplete) {
+                                          showToast("Seguimiento Incompleto", "Debe marcar el status de entrega (Entregado o No Entregado) para todos los puntos antes de guardar definitivamente.", 'error');
+                                          return;
+                                        }
+                                        if (hasMissingFailedReasons) {
+                                          showToast("Motivos de Rechazo Faltantes", "Debe seleccionar un motivo de rechazo válido (como POR HORARIO, CLIENTE NO RECIBE, NO CARGADO, SIN STOCK o DESCORDINACION) para todos los documentos con problemas.", 'error');
+                                          return;
+                                        }
+                                        handleUpdateManifestField(mId, 'logisticsDataSaved', true);
+                                      }}
+                                      className={`p-2 rounded-lg transition-all cursor-pointer ${
+                                        isReadyToClose 
+                                          ? 'text-slate-400 hover:text-emerald-600 hover:bg-emerald-50' 
+                                          : 'text-slate-200 cursor-not-allowed opacity-50'
+                                      }`}
+                                      title={isReadyToClose ? "Guardar y Bloquear Datos" : isTrackingComplete ? "Pendiente seleccionar motivo de rechazo" : "Pendiente completar status de entrega"}
+                                    >
+                                      <Save className="w-4 h-4" />
+                                    </button>
+                                  )}
+                                  <button 
+                                    type="button"
+                                    onClick={() => handlePrintFinalizedReport(manifest)}
+                                    className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all cursor-pointer"
+                                    title="Imprimir Hoja de Ruta"
+                                  >
+                                    <Printer className="w-4 h-4" />
+                                  </button>
+                                  <button 
+                                    type="button"
+                                    onClick={() => setReopenConfirmId(mId)}
+                                    className="p-2 text-slate-400 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-all cursor-pointer"
+                                    title="Reabrir Ruta para Edición"
+                                  >
+                                    <RotateCcw className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Vista Mobile: Tarjetas con Acordeón de Edición Optimizado */}
+                  <div className="md:hidden flex flex-col gap-4">
+                    {filteredResumenManifests.map((manifest) => {
+                      const mId = manifest.id;
+                      const rName = routeMap[manifest.routeId || ''] || 'Sin nombre';
+                      const dName = driverMap[manifest.driverId || ''] || 'No asignado';
+                      const vDesc = vehicleMap[manifest.vehicleId || ''] || 'No asignado';
+                      const totalPoints = manifest.documentsSnapshot?.length ?? 0;
+                      const completedPoints = manifest.documentsSnapshot?.filter(d => 
+                        d.trackingStatus === 'ENTREGADO' || 
+                        d.trackingStatus === 'RETIRADO' || 
+                        d.trackingStatus === 'NO ENTREGADO' || 
+                        d.trackingStatus === 'NO RETIRADO'
+                      ).length ?? 0;
+                      const pendingPoints = totalPoints - completedPoints;
+                      const totalEstVal = manifest.documentsSnapshot?.reduce((s,d) => d.tipo === 'OC' ? s : s + (d.totalAmount ?? d.totalPendiente), 0) || 0;
+                      
+                      const hasMissingFailedReasons = manifest.documentsSnapshot?.some(d => {
+                        const isFailed = d.trackingStatus === 'NO ENTREGADO' || d.trackingStatus === 'NO RETIRADO';
+                        if (!isFailed) return false;
+                        if (!d.failedReason) return true;
+                        
+                        if (d.trackingStatus === 'NO RETIRADO') {
+                          return !['SIN STOCK', 'POR HORARIO', 'DESCORDINACION'].includes(d.failedReason);
+                        } else {
+                          return !['POR HORARIO', 'CLIENTE NO RECIBE', 'NO CARGADO'].includes(d.failedReason);
+                        }
+                      }) ?? false;
+                      const isTrackingComplete = totalPoints > 0 && totalPoints === completedPoints;
+                      const isReadyToClose = isTrackingComplete && !hasMissingFailedReasons;
+                      const trackingProgress = totalPoints > 0 ? Math.round((completedPoints / totalPoints) * 100) : 0;
+                      const isExpanded = expandedResumenId === mId;
+
+                      return (
+                        <div 
+                          key={mId} 
+                          className={`bg-white border rounded-2xl shadow-sm transition-all overflow-hidden ${
+                            isExpanded ? 'ring-2 ring-indigo-500 border-indigo-200' : 'border-slate-200'
+                          }`}
+                        >
+                          {/* Card Header clickable to expand/toggle edit mode */}
+                          <div 
+                            onClick={() => setExpandedResumenId(isExpanded ? null : mId)}
+                            className="p-4 flex items-start justify-between gap-3 cursor-pointer hover:bg-slate-50 transition-colors"
+                          >
+                            <div className="flex flex-col gap-1.5 text-left min-w-0 flex-1">
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setShowManifestDetailId(mId);
+                                  }}
+                                  className="text-xs font-black px-2.5 py-1 bg-slate-900 hover:bg-indigo-600 text-white hover:text-white rounded-lg font-mono uppercase tracking-tighter cursor-pointer flex items-center gap-1 active:scale-95 transition-all"
+                                  title="Ver y Gestionar Puntos de Entrega"
+                                >
+                                  HR-{manifest.routeNumber ?? '1001'}
+                                  <ClipboardList className="w-3.5 h-3.5 opacity-80" />
+                                </button>
+                                <span className="text-[10px] text-slate-500 font-mono">
+                                  {manifest.date ? new Date(manifest.date + 'T12:00:00').toLocaleDateString('es-CL') : '-'}
                                 </span>
                               </div>
-                            </td>
-                            <td className="px-4 py-4 text-right">
-                              <p className="font-bold text-indigo-700 font-mono">${Math.round(totalEstVal).toLocaleString('es-CL')}</p>
-                              <p className="text-slate-400 font-mono text-[9px]">{manifest.documentsSnapshot?.length ?? 0} doctos</p>
-                            </td>
-                            <td className="px-4 py-4">
-                              <div className="flex items-center justify-end gap-1">
+                              <h3 className="text-sm font-black text-slate-900 tracking-tight leading-tight truncate">{rName}</h3>
+                              <div className="flex flex-col gap-1 text-[11px] text-slate-600 mt-1">
+                                <span className="truncate">👤 {dName}</span>
+                                <span className="truncate text-slate-400 text-[10px]">🚛 {vDesc}</span>
+                              </div>
+                            </div>
+                            
+                            <div className="flex flex-col items-end shrink-0 gap-1 text-right">
+                              <span className="font-mono text-xs sm:text-sm font-black text-indigo-700">${Math.round(totalEstVal).toLocaleString('es-CL')}</span>
+                              <span className="text-[10px] text-slate-400 font-mono">{manifest.documentsSnapshot?.length ?? 0} doctos</span>
+                              
+                              <div className="mt-1 flex items-center gap-1.5">
+                                <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded-full ${
+                                  isReadyToClose ? 'bg-emerald-50 text-emerald-600' : isTrackingComplete ? 'bg-amber-50 text-amber-600' : 'bg-indigo-50 text-indigo-600'
+                                }`}>
+                                  {isReadyToClose ? 'COMPLETO' : isTrackingComplete ? 'FALTA MOTIVO' : `${trackingProgress}%`}
+                                </span>
+                                {isExpanded ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Progress bar line */}
+                          <div className="w-full bg-slate-100 h-1 overflow-hidden">
+                            <div 
+                              className={`h-full transition-all duration-500 ${isReadyToClose ? 'bg-emerald-500' : isTrackingComplete ? 'bg-amber-500' : 'bg-indigo-500'}`}
+                              style={{ width: `${trackingProgress}%` }}
+                            />
+                          </div>
+
+                          {/* Quick Stats Summary (Compact when closed) */}
+                          {!isExpanded && (
+                            <div className="bg-slate-50/50 px-4 py-2.5 flex items-center justify-between text-[11px] border-t border-slate-100">
+                              <div className="flex items-center gap-3 text-slate-500">
+                                <span>Total: <strong>{totalPoints}</strong></span>
+                                <span>OK: <strong className="text-emerald-600">{completedPoints}</strong></span>
+                                <span>Pend: <strong className={pendingPoints > 0 ? 'text-rose-600' : 'text-slate-400'}>{pendingPoints}</strong></span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setExpandedResumenId(mId);
+                                }}
+                                className="text-indigo-600 font-bold hover:underline cursor-pointer"
+                              >
+                                Configurar
+                              </button>
+                            </div>
+                          )}
+
+                          {/* Expanded Card Body: Inputs + Mobile keyboard optimization layout */}
+                          {isExpanded && (
+                            <div className="p-4 bg-slate-50 border-t border-slate-150 flex flex-col gap-4 text-left">
+                              <div className="bg-white p-3.5 rounded-xl border border-slate-200/60 shadow-sm">
+                                <h4 className="text-[11px] font-black text-slate-400 uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
+                                  <Clock className="w-3.5 h-3.5 text-indigo-500" /> Horarios de la Ruta
+                                </h4>
+                                <div className="grid grid-cols-2 gap-3">
+                                  <div className="flex flex-col gap-1">
+                                    <label className="text-[10px] font-bold text-slate-500">Inicio de Ruta</label>
+                                    <input 
+                                      type="time" 
+                                      disabled={manifest.logisticsDataSaved}
+                                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/20 disabled:opacity-65 font-sans"
+                                      value={manifest.startTime || ''}
+                                      onChange={(e) => handleUpdateManifestField(mId, 'startTime', e.target.value)}
+                                    />
+                                  </div>
+                                  <div className="flex flex-col gap-1">
+                                    <label className="text-[10px] font-bold text-slate-500">Fin de Ruta</label>
+                                    <input 
+                                      type="time" 
+                                      disabled={manifest.logisticsDataSaved}
+                                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/20 disabled:opacity-65 font-sans"
+                                      value={manifest.endTime || ''}
+                                      onChange={(e) => handleUpdateManifestField(mId, 'endTime', e.target.value)}
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="bg-white p-3.5 rounded-xl border border-slate-200/60 shadow-sm">
+                                <h4 className="text-[11px] font-black text-slate-400 uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
+                                  <MapPin className="w-3.5 h-3.5 text-indigo-500" /> Registro de Kilometraje
+                                </h4>
+                                <div className="grid grid-cols-2 gap-3">
+                                  <div className="flex flex-col gap-1">
+                                    <label className="text-[10px] font-bold text-slate-500">Kilometraje Inicial</label>
+                                    <input 
+                                      type="number" 
+                                      disabled={manifest.logisticsDataSaved}
+                                      placeholder="Ej. 12050"
+                                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/20 disabled:opacity-65 font-sans"
+                                      value={manifest.initialKm ?? ''}
+                                      onChange={(e) => handleUpdateManifestField(mId, 'initialKm', e.target.value === '' ? null : Number(e.target.value))}
+                                    />
+                                  </div>
+                                  <div className="flex flex-col gap-1">
+                                    <label className="text-[10px] font-bold text-slate-500">Kilometraje Final</label>
+                                    <input 
+                                      type="number" 
+                                      disabled={manifest.logisticsDataSaved}
+                                      placeholder="Ej. 12240"
+                                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/20 disabled:opacity-65 font-sans"
+                                      value={manifest.finalKm ?? ''}
+                                      onChange={(e) => handleUpdateManifestField(mId, 'finalKm', e.target.value === '' ? null : Number(e.target.value))}
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="bg-white p-3.5 rounded-xl border border-slate-200/60 shadow-sm flex flex-col gap-3">
+                                <h4 className="text-[11px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                                  <ClipboardList className="w-3.5 h-3.5 text-indigo-500" /> Puntos y Entregas ({completedPoints}/{totalPoints})
+                                </h4>
+                                <div className="flex flex-col gap-1 text-xs text-slate-600 font-medium">
+                                  <p>Puntos Completados: <strong className="text-emerald-600">{completedPoints}</strong> / {totalPoints}</p>
+                                  {pendingPoints > 0 ? (
+                                    <p className="text-[11px] text-rose-500 font-bold">⚠️ Faltan {pendingPoints} puntos por registrar estado de entrega.</p>
+                                  ) : (
+                                    <p className="text-[11px] text-emerald-600 font-bold">🎉 Todos los estados de entrega han sido registrados.</p>
+                                  )}
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => setShowManifestDetailId(mId)}
+                                  className="w-full flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white p-3.5 rounded-xl text-xs font-black uppercase tracking-wider shadow-md active:scale-95 transition-all cursor-pointer font-sans"
+                                >
+                                  <ClipboardList className="w-4 h-4" /> Gestionar Puntos (Estados / Comentarios)
+                                </button>
+                              </div>
+
+                              <div className="flex items-center gap-2 mt-2">
                                 {manifest.logisticsDataSaved ? (
-                                  <span 
-                                    className="p-2 text-emerald-600 bg-emerald-50 rounded-lg flex items-center justify-center"
-                                    title="Datos guardados y bloqueados de edición (reabra la ruta para poder editar de nuevo)"
-                                  >
-                                    <Lock className="w-4 h-4 text-emerald-600" />
-                                  </span>
+                                  <div className="flex-1 flex items-center justify-center gap-2 bg-emerald-50 text-emerald-700 p-3 rounded-xl border border-emerald-200 text-xs font-black uppercase tracking-wider">
+                                    <Lock className="w-4 h-4" /> Datos Bloqueados
+                                  </div>
                                 ) : (
                                   <button 
+                                    type="button"
                                     onClick={() => {
                                       if (!isTrackingComplete) {
                                         showToast("Seguimiento Incompleto", "Debe marcar el status de entrega (Entregado o No Entregado) para todos los puntos antes de guardar definitivamente.", 'error');
@@ -4600,38 +5148,41 @@ export default function App() {
                                       }
                                       handleUpdateManifestField(mId, 'logisticsDataSaved', true);
                                     }}
-                                    className={`p-2 rounded-lg transition-all cursor-pointer ${
+                                    className={`flex-1 p-3.5 rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 shadow-md transition-all active:scale-95 cursor-pointer font-sans ${
                                       isReadyToClose 
-                                        ? 'text-slate-400 hover:text-emerald-600 hover:bg-emerald-50' 
-                                        : 'text-slate-200 cursor-not-allowed opacity-50'
+                                        ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/15' 
+                                        : 'bg-slate-200 text-slate-400 cursor-not-allowed opacity-60'
                                     }`}
-                                    title={isReadyToClose ? "Guardar y Bloquear Datos" : isTrackingComplete ? "Pendiente seleccionar motivo de rechazo" : "Pendiente completar status de entrega"}
                                   >
-                                    <Save className="w-4 h-4" />
+                                    <Save className="w-4 h-4" /> Guardar y Cerrar
                                   </button>
                                 )}
+
                                 <button 
+                                  type="button"
                                   onClick={() => handlePrintFinalizedReport(manifest)}
-                                  className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all cursor-pointer"
+                                  className="p-3.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 hover:text-indigo-600 rounded-xl transition-all cursor-pointer shadow-sm active:scale-95"
                                   title="Imprimir Hoja de Ruta"
                                 >
-                                  <Printer className="w-4 h-4" />
+                                  <Printer className="w-4.5 h-4.5" />
                                 </button>
+                                
                                 <button 
+                                  type="button"
                                   onClick={() => setReopenConfirmId(mId)}
-                                  className="p-2 text-slate-400 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-all cursor-pointer"
+                                  className="p-3.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 hover:text-orange-600 rounded-xl transition-all cursor-pointer shadow-sm active:scale-95"
                                   title="Reabrir Ruta para Edición"
                                 >
-                                  <RotateCcw className="w-4 h-4" />
+                                  <RotateCcw className="w-4.5 h-4.5" />
                                 </button>
                               </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
               ) : (
                 <div className="bg-white border border-slate-200 rounded-2xl p-20 flex flex-col items-center justify-center text-center opacity-40 animate-pulse h-full min-h-[400px]">
                   <Truck className="w-16 h-16 text-indigo-500 mb-4" />
