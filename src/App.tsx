@@ -289,6 +289,8 @@ export default function App() {
   // States for Resumen de Rutas search
   const [resumenSearch, setResumenSearch] = useState('');
   const [resumenDate, setResumenDate] = useState('');
+  const [resumenFilterIncompleteProgress, setResumenFilterIncompleteProgress] = useState(false);
+  const [resumenFilterIncompleteMileage, setResumenFilterIncompleteMileage] = useState(false);
   const [resumenFiltersCollapsed, setResumenFiltersCollapsed] = useState(true);
   const [expandedResumenId, setExpandedResumenId] = useState<string | null>(null);
 
@@ -403,6 +405,113 @@ export default function App() {
       assignment: assignments[doc.id]
     })) as MergedDocument[];
   }, [allDocuments, assignments]);
+
+  const hasRunSyncFix = useRef(false);
+  useEffect(() => {
+    if (hasRunSyncFix.current || !mergedDocuments.length || Object.keys(manifests).length === 0 || Object.keys(assignments).length === 0) return;
+    
+    // Check if there are assignments that point to a finalized manifest, but are NOT in the manifest's documentsSnapshot
+    const fixCorruptedManifests = async () => {
+      hasRunSyncFix.current = true;
+      const manifestUpdates: { [manifestId: string]: any[] } = {};
+      const assignmentUpdates: { id: string, route: string, dispatchDate: string | null }[] = [];
+      
+      // Pass 1: Clean up invalid items ALREADY in finalized manifests
+      for (const [mId, manifest] of Object.entries(manifests) as [string, LogisticsManifest][]) {
+        if (manifest.isFinalized && manifest.documentsSnapshot) {
+          const invalidDocs = manifest.documentsSnapshot.filter(d => 
+            d.tipo !== 'OC' && (!d.guideNumber || d.guideNumber.trim() === '')
+          );
+          
+          if (invalidDocs.length > 0) {
+            manifestUpdates[mId] = manifest.documentsSnapshot.filter(d => 
+              d.tipo === 'OC' || (d.guideNumber && d.guideNumber.trim() !== '')
+            );
+            for (const d of invalidDocs) {
+              assignmentUpdates.push({ id: d.id, route: 'UNASSIGNED', dispatchDate: null });
+            }
+          }
+        }
+      }
+
+      // Pass 2: Add missing items that point to finalized/saved manifests, but ONLY if valid
+      for (const docObj of mergedDocuments) {
+        const assignment = assignments[docObj.id];
+        if (assignment && assignment.route && assignment.route !== 'UNASSIGNED' && assignment.dispatchDate) {
+          const mId = `${assignment.route}_${assignment.dispatchDate}`;
+          const manifest = manifests[mId];
+          
+          if (manifest && (manifest.isFinalized || manifest.logisticsDataSaved) && manifest.documentsSnapshot) {
+            // Use manifestUpdates if we modified it in Pass 1, otherwise use the existing snapshot
+            const currentSnapshot = manifestUpdates[mId] || manifest.documentsSnapshot;
+            const exists = currentSnapshot.some(d => d.id === docObj.id);
+            
+            if (!exists) {
+               const tipo = assignment.tipo || docObj.tipo || 'NV';
+               const guideNumber = assignment.guideNumber || '';
+               const isFinalized = manifest.isFinalized;
+               
+               // If finalized, do not add invalid docs, unassign them instead!
+               if (isFinalized && tipo !== 'OC' && guideNumber.trim() === '') {
+                 assignmentUpdates.push({ id: docObj.id, route: 'UNASSIGNED', dispatchDate: null });
+               } else {
+                 if (!manifestUpdates[mId]) manifestUpdates[mId] = [...manifest.documentsSnapshot];
+                 manifestUpdates[mId].push({
+                   id: docObj.id,
+                   tipo,
+                   razonSocial: assignment.razonSocial || docObj.razonSocial || '',
+                   totalPendiente: assignment.totalPendiente || docObj.totalPendiente || 0,
+                   totalAmount: assignment.totalAmount ?? (assignment.totalPendiente || docObj.totalPendiente || 0),
+                   guideNumber,
+                   logisticsNotes: assignment.logisticsNotes || '',
+                   location: assignment.location || '',
+                   orderIndex: manifestUpdates[mId].length + 1,
+                   deliveryStatus: assignment.deliveryStatus || 'COMPLETO',
+                   detalle: docObj.detalle || [],
+                   isAdditional: false,
+                   isOrphaned: false,
+                   trackingStatus: 'EN CURSO',
+                   trackingObservation: '',
+                   proceso: 'ENTREGA'
+                 });
+               }
+            }
+          }
+        }
+      }
+      
+      if (Object.keys(manifestUpdates).length > 0 || assignmentUpdates.length > 0) {
+        console.log("Fixing corrupted manifests/assignments:", { manifestUpdates, assignmentUpdates });
+        const batch = writeBatch(db);
+        
+        for (const [mId, newSnapshot] of Object.entries(manifestUpdates)) {
+          const pendingCount = newSnapshot.filter(d => 
+            d.trackingStatus === 'EN CURSO' || !d.trackingStatus
+          ).length;
+          
+          batch.set(doc(manifestsCol, mId), {
+            documentsSnapshot: newSnapshot,
+            totalPoints: newSnapshot.length,
+            pendingPoints: pendingCount,
+            updatedAt: serverTimestamp()
+          }, { merge: true });
+        }
+        
+        for (const update of assignmentUpdates) {
+          batch.set(doc(db, "assignments", update.id), {
+            route: update.route,
+            dispatchDate: update.dispatchDate,
+            updatedAt: serverTimestamp()
+          }, { merge: true });
+        }
+        
+        await batch.commit();
+        console.log("Fix complete.");
+      }
+    };
+    
+    fixCorruptedManifests();
+  }, [mergedDocuments, manifests, assignments]);
 
   const hojaDeRutaDocs = useMemo(() => {
     if (!hrSelectedRoute || !hrSelectedDate) return [];
@@ -657,9 +766,27 @@ export default function App() {
       
       const matchesSearch = combined.includes(resumenSearch.toLowerCase());
       const matchesDate = !resumenDate || m.date === resumenDate;
-      return matchesSearch && matchesDate;
+      
+      let matchesProgress = true;
+      if (resumenFilterIncompleteProgress) {
+        const totalPoints = m.documentsSnapshot?.length || 0;
+        const completedPoints = (m.documentsSnapshot || []).filter(d => 
+          d.trackingStatus === 'ENTREGADO' || 
+          d.trackingStatus === 'NO ENTREGADO' || 
+          d.trackingStatus === 'RETIRADO' || 
+          d.trackingStatus === 'NO RETIRADO'
+        ).length;
+        matchesProgress = totalPoints > 0 && completedPoints < totalPoints;
+      }
+      
+      let matchesMileage = true;
+      if (resumenFilterIncompleteMileage) {
+        matchesMileage = !m.initialMileage || !m.finalMileage || m.finalMileage <= m.initialMileage;
+      }
+
+      return matchesSearch && matchesDate && matchesProgress && matchesMileage;
     });
-  }, [finalizedManifestsList, resumenSearch, resumenDate, routeMap, driverMap, vehicleMap]);
+  }, [finalizedManifestsList, resumenSearch, resumenDate, resumenFilterIncompleteProgress, resumenFilterIncompleteMileage, routeMap, driverMap, vehicleMap]);
 
   // Auth observer and profile sync
   useEffect(() => {
@@ -1392,7 +1519,14 @@ export default function App() {
         updateData.date = parts[1];
       }
 
-      await setDoc(doc(manifestsCol, manifestId), updateData, { merge: true });
+      const cleanedData = Object.entries(updateData).reduce((acc, [k, v]) => {
+        if (v !== undefined) {
+          acc[k] = v;
+        }
+        return acc;
+      }, {} as any);
+
+      await setDoc(doc(manifestsCol, manifestId), cleanedData, { merge: true });
     } catch (e: any) {
       console.error(`Error actualizando manifiesto:`, e);
     }
@@ -1760,6 +1894,18 @@ export default function App() {
       logisticsNotes: '',
     };
 
+    if (field === 'route' || field === 'dispatchDate') {
+      const oldDate = current.dispatchDate || getLocalDateString();
+      const oldRoute = current.route || 'UNASSIGNED';
+      const newDate = field === 'dispatchDate' ? value : (current.dispatchDate || getLocalDateString());
+      const newRoute = field === 'route' ? value : (current.route || 'UNASSIGNED');
+      
+      if (oldDate !== newDate || oldRoute !== newRoute) {
+         return handleChangePlanningDate(docId, oldDate, newDate, oldRoute, newRoute);
+      }
+      return;
+    }
+
     const originalDoc = allDocuments.find(d => d.id === docId);
 
     const updated = {
@@ -1784,17 +1930,21 @@ export default function App() {
       }
     }
 
-    // Auto-assignment of dispatchDate when a valid route is set and there is no prior dispatchDate
-    if (field === 'route' && value !== 'UNASSIGNED' && !updated.dispatchDate) {
-      updated.dispatchDate = hrSelectedDate || getLocalDateString();
-    }
-
     const cleanedUpdate = Object.entries(updated).reduce((acc, [key, val]) => {
       if (val !== undefined) {
         acc[key] = val;
       }
       return acc;
     }, {} as any);
+
+    if (field === 'guideNumber') {
+      const manifestId = `${current.route}_${current.dispatchDate}`;
+      const manifest = manifests[manifestId];
+      if (manifest?.isFinalized && updated.tipo !== 'OC' && (!value || value.trim() === '')) {
+         showToast("Movimiento Restringido", "No puedes dejar sin Guía de Despacho un documento en una ruta definitiva.", "error");
+         return;
+      }
+    }
 
     try {
       await setDoc(doc(assignmentsCol, docId), cleanedUpdate);
@@ -1887,6 +2037,19 @@ export default function App() {
         }
       }
 
+      // Check if trying to move a document without guide number to a finalized manifest
+      const newManifestId = `${finalNewRoute}_${newDate}`;
+      const newManifest = manifests[newManifestId];
+      if (newManifest && newManifest.isFinalized) {
+         const tipo = updated.tipo || 'NV';
+         const guideNumber = updated.guideNumber || '';
+         if (tipo !== 'OC' && guideNumber.trim() === '') {
+            showToast("Movimiento Restringido", "No puedes asignar un documento sin Guía de Despacho a una hoja de ruta definitiva.", "error");
+            setLoading(false);
+            return;
+         }
+      }
+
       // Update in assignments collection
       await setDoc(doc(assignmentsCol, docId), updated);
 
@@ -1905,6 +2068,43 @@ export default function App() {
           pendingPoints: pendingCount,
           updatedAt: serverTimestamp()
         }, { merge: true });
+      }
+
+      // Add to snapshot of the new manifest if it's finalized or has logistics data saved
+      if (newManifest && (newManifest.isFinalized || newManifest.logisticsDataSaved) && newManifest.documentsSnapshot) {
+        const docExists = newManifest.documentsSnapshot.some(d => d.id === docId);
+        if (!docExists) {
+          const newDocSnapshot = {
+            id: docId,
+            tipo: updated.tipo,
+            razonSocial: updated.razonSocial,
+            totalPendiente: updated.totalPendiente,
+            totalAmount: updated.totalAmount ?? updated.totalPendiente,
+            guideNumber: updated.guideNumber || '',
+            logisticsNotes: updated.logisticsNotes || '',
+            location: updated.location || '',
+            orderIndex: newManifest.documentsSnapshot.length + 1,
+            deliveryStatus: updated.deliveryStatus || 'COMPLETO',
+            detalle: originalDoc?.detalle || [],
+            isAdditional: false,
+            isOrphaned: false,
+            trackingStatus: 'EN CURSO',
+            trackingObservation: '',
+            proceso: 'ENTREGA'
+          };
+          
+          const newSnapshot = [...newManifest.documentsSnapshot, newDocSnapshot];
+          const pendingCount = newSnapshot.filter(d => 
+            d.trackingStatus === 'EN CURSO' || !d.trackingStatus
+          ).length;
+
+          await setDoc(doc(manifestsCol, newManifestId), {
+            documentsSnapshot: newSnapshot,
+            totalPoints: newSnapshot.length,
+            pendingPoints: pendingCount,
+            updatedAt: serverTimestamp()
+          }, { merge: true });
+        }
       }
 
       showToast("Planificación Actualizada", `El documento se reprogramó correctamente.`, 'success');
@@ -4659,6 +4859,36 @@ export default function App() {
                     </button>
                   )}
 
+                  <div className="flex items-center gap-2 w-full sm:w-auto mt-2 sm:mt-0">
+                    <button
+                      onClick={() => setResumenFilterIncompleteProgress(!resumenFilterIncompleteProgress)}
+                      className={`text-xs font-black px-3 py-2 rounded-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer border uppercase tracking-wider text-[11px] flex-1 sm:flex-initial ${
+                        resumenFilterIncompleteProgress
+                          ? 'bg-amber-50 border-amber-200 text-amber-700 shadow-sm'
+                          : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                      }`}
+                      title="Filtrar rutas con progreso de entrega menor al 100%"
+                    >
+                      <Clock className={`w-3.5 h-3.5 ${resumenFilterIncompleteProgress ? 'text-amber-500' : 'text-slate-400'}`} /> 
+                      <span className="hidden sm:inline">Progreso &lt; 100%</span>
+                      <span className="sm:hidden">&lt; 100%</span>
+                    </button>
+
+                    <button
+                      onClick={() => setResumenFilterIncompleteMileage(!resumenFilterIncompleteMileage)}
+                      className={`text-xs font-black px-3 py-2 rounded-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer border uppercase tracking-wider text-[11px] flex-1 sm:flex-initial ${
+                        resumenFilterIncompleteMileage
+                          ? 'bg-rose-50 border-rose-200 text-rose-700 shadow-sm'
+                          : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                      }`}
+                      title="Filtrar rutas con kilometraje final no registrado"
+                    >
+                      <Truck className={`w-3.5 h-3.5 ${resumenFilterIncompleteMileage ? 'text-rose-500' : 'text-slate-400'}`} /> 
+                      <span className="hidden xl:inline">Falta Km</span>
+                      <span className="xl:hidden">Km</span>
+                    </button>
+                  </div>
+
                   <button 
                     onClick={() => {
                       setConsolidatedReportDate(resumenDate || getLocalDateString());
@@ -4716,7 +4946,7 @@ export default function App() {
                             if (!d.failedReason) return true;
                             
                             if (d.trackingStatus === 'NO RETIRADO') {
-                              return !['SIN STOCK', 'POR HORARIO', 'DESCORDINACION'].includes(d.failedReason);
+                              return !['SIN STOCK', 'POR HORARIO', 'DESCORDINACION', 'BLOQUEADOS POR PAGO'].includes(d.failedReason);
                             } else {
                               return !['POR HORARIO', 'CLIENTE NO RECIBE', 'NO CARGADO'].includes(d.failedReason);
                             }
@@ -4893,7 +5123,7 @@ export default function App() {
                                           return;
                                         }
                                         if (hasMissingFailedReasons) {
-                                          showToast("Motivos de Rechazo Faltantes", "Debe seleccionar un motivo de rechazo válido (como POR HORARIO, CLIENTE NO RECIBE, NO CARGADO, SIN STOCK o DESCORDINACION) para todos los documentos con problemas.", 'error');
+                                          showToast("Motivos de Rechazo Faltantes", "Debe seleccionar un motivo de rechazo válido (como POR HORARIO, CLIENTE NO RECIBE, NO CARGADO, SIN STOCK, DESCORDINACION o BLOQUEADOS POR PAGO) para todos los documentos con problemas.", 'error');
                                           return;
                                         }
                                         handleUpdateManifestField(mId, 'logisticsDataSaved', true);
@@ -4956,7 +5186,7 @@ export default function App() {
                         if (!d.failedReason) return true;
                         
                         if (d.trackingStatus === 'NO RETIRADO') {
-                          return !['SIN STOCK', 'POR HORARIO', 'DESCORDINACION'].includes(d.failedReason);
+                          return !['SIN STOCK', 'POR HORARIO', 'DESCORDINACION', 'BLOQUEADOS POR PAGO'].includes(d.failedReason);
                         } else {
                           return !['POR HORARIO', 'CLIENTE NO RECIBE', 'NO CARGADO'].includes(d.failedReason);
                         }
@@ -5143,7 +5373,7 @@ export default function App() {
                                         return;
                                       }
                                       if (hasMissingFailedReasons) {
-                                        showToast("Motivos de Rechazo Faltantes", "Debe seleccionar un motivo de rechazo válido (como POR HORARIO, CLIENTE NO RECIBE, NO CARGADO, SIN STOCK o DESCORDINACION) para todos los documentos con problemas.", 'error');
+                                        showToast("Motivos de Rechazo Faltantes", "Debe seleccionar un motivo de rechazo válido (como POR HORARIO, CLIENTE NO RECIBE, NO CARGADO, SIN STOCK, DESCORDINACION o BLOQUEADOS POR PAGO) para todos los documentos con problemas.", 'error');
                                         return;
                                       }
                                       handleUpdateManifestField(mId, 'logisticsDataSaved', true);

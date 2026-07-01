@@ -53,7 +53,7 @@ export default function ManifestDetailModal({
         return { 
           ...d, 
           trackingStatus: newStatus as any,
-          failedReason: isFailed ? (d.failedReason || '') : undefined
+          failedReason: isFailed ? (d.failedReason || '') : null
         };
       }
       return d;
@@ -268,7 +268,7 @@ export default function ManifestDetailModal({
                         <div className="flex flex-col gap-1.5 min-w-[150px]">
                           <div className="flex items-center gap-1">
                             <select
-                              disabled={manifest.logisticsDataSaved}
+                              disabled={manifest.logisticsDataSaved && !isAdmin}
                               value={doc.trackingStatus || 'EN CURSO'}
                               onChange={(e) => handleStatusChange(doc.id, e.target.value)}
                               className={`text-[9px] font-bold py-1 px-2 rounded-lg border focus:ring-2 focus:ring-opacity-20 transition-all outline-none appearance-none cursor-pointer ${
@@ -300,6 +300,7 @@ export default function ManifestDetailModal({
 
                           {(doc.trackingStatus === 'NO ENTREGADO' || doc.trackingStatus === 'NO RETIRADO') && (
                             <select
+                              disabled={manifest.logisticsDataSaved && !isAdmin}
                               value={doc.failedReason || ''}
                               onChange={(e) => handleFailedReasonChange(doc.id, e.target.value)}
                               className={`text-[9px] font-black py-1 px-2 rounded-lg border focus:ring-2 focus:ring-opacity-20 transition-all outline-none appearance-none cursor-pointer ${
@@ -314,6 +315,7 @@ export default function ManifestDetailModal({
                                   <option value="SIN STOCK">SIN STOCK</option>
                                   <option value="POR HORARIO">POR HORARIO</option>
                                   <option value="DESCORDINACION">DESCORDINACION</option>
+                                  <option value="BLOQUEADOS POR PAGO">BLOQUEADOS POR PAGO</option>
                                 </>
                               ) : (
                                 <>
@@ -328,6 +330,7 @@ export default function ManifestDetailModal({
                       </td>
                       <td className="px-4 py-3">
                         <input 
+                          disabled={manifest.logisticsDataSaved && !isAdmin}
                           type="text"
                           placeholder="Agregar observación..."
                           className="w-full text-[10px] bg-white border border-slate-200 rounded px-2 py-1 focus:ring-1 focus:ring-indigo-500 outline-none text-slate-600 font-normal placeholder:text-slate-300 transition-all"
@@ -461,7 +464,7 @@ export default function ManifestDetailModal({
                       <label className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Estado Entrega</label>
                       <div className="relative">
                         <select
-                          disabled={manifest.logisticsDataSaved}
+                          disabled={manifest.logisticsDataSaved && !isAdmin}
                           value={doc.trackingStatus || 'EN CURSO'}
                           onChange={(e) => handleStatusChange(doc.id, e.target.value)}
                           className={`w-full text-xs font-bold py-2 px-2.5 rounded-xl border focus:ring-2 focus:ring-opacity-20 transition-all outline-none appearance-none cursor-pointer h-10 pr-7 ${
@@ -499,6 +502,7 @@ export default function ManifestDetailModal({
                     <div className="flex flex-col gap-1">
                       <label className="text-[9px] font-black text-rose-500 uppercase tracking-wider">Motivo No Entrega/Retiro</label>
                       <select
+                        disabled={manifest.logisticsDataSaved && !isAdmin}
                         value={doc.failedReason || ''}
                         onChange={(e) => handleFailedReasonChange(doc.id, e.target.value)}
                         className={`w-full text-xs font-black py-2.5 px-3 rounded-xl border focus:ring-2 focus:ring-opacity-20 transition-all outline-none appearance-none cursor-pointer h-10 ${
@@ -513,6 +517,7 @@ export default function ManifestDetailModal({
                             <option value="SIN STOCK">SIN STOCK</option>
                             <option value="POR HORARIO">POR HORARIO</option>
                             <option value="DESCORDINACION">DESCORDINACION</option>
+                            <option value="BLOQUEADOS POR PAGO">BLOQUEADOS POR PAGO</option>
                           </>
                         ) : (
                           <>
@@ -529,6 +534,7 @@ export default function ManifestDetailModal({
                   <div className="flex flex-col gap-1">
                     <label className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Observaciones</label>
                     <input 
+                      disabled={manifest.logisticsDataSaved && !isAdmin}
                       type="text"
                       placeholder="Agregar observación de entrega..."
                       className="w-full text-xs bg-slate-50 hover:bg-slate-100/50 focus:bg-white border border-slate-200 focus:border-indigo-500 rounded-xl px-3 py-2.5 focus:ring-2 focus:ring-indigo-500/10 outline-none text-slate-700 font-medium placeholder:text-slate-300 transition-all h-10"
