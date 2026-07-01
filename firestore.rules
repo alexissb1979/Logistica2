@@ -61,5 +61,9 @@ service cloud.firestore {
     match /manifests/{id} {
       allow read, write: if isSignedIn();
     }
+
+    match /logistics_requests/{id} {
+      allow read, write: if isSignedIn();
+    }
   }
 }

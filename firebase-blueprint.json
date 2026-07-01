@@ -82,6 +82,29 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["routeId", "date"]
+    },
+    "LogisticsRequest": {
+      "title": "Logistics Request",
+      "description": "Request or alert for logistics assignments.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "clientName": { "type": "string" },
+        "address": { "type": "string" },
+        "priority": { "type": "string", "enum": ["BAJA", "MEDIA", "ALTA", "CRITICA"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "createdBy": { "type": "string" },
+        "status": { "type": "string", "enum": ["PENDIENTE", "COMPLETADO"] },
+        "observation": { "type": "string" },
+        "completedAt": { "type": "string", "format": "date-time" },
+        "completedBy": { "type": "string" },
+        "targetDate": { "type": "string" },
+        "alarmOption": { "type": "string", "enum": ["SAME_DAY", "ANY_DAY", "SPECIFIC_DATE"] },
+        "alarmDate": { "type": "string" }
+      },
+      "required": ["id", "title", "description", "priority", "createdAt", "createdBy", "status", "targetDate", "alarmOption"]
     }
   },
   "firestore": {
@@ -108,6 +131,10 @@
     "/manifests/{id}": {
       "schema": "LogisticsManifest",
       "description": "Collection of manifests."
+    },
+    "/logistics_requests/{id}": {
+      "schema": "LogisticsRequest",
+      "description": "Collection of logistics requests and alerts."
     }
   }
 }

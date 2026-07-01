@@ -1076,7 +1076,11 @@ export default function App() {
   const handleUpdateRequest = async (id: string, data: Partial<LogisticsRequest>) => {
     try {
       const ref = doc(db, "logistics_requests", id);
-      await setDoc(ref, data, { merge: true });
+      const cleanedData = Object.entries(data).reduce((acc, [k, v]) => {
+        acc[k] = v === undefined ? null : v;
+        return acc;
+      }, {} as any);
+      await setDoc(ref, cleanedData, { merge: true });
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, `logistics_requests/${id}`);
     }
