@@ -3,7 +3,7 @@ import {
   Upload, FileText, Search, Save, Calendar as CalendarIcon, MapPin, 
   Info, Trash2, Edit2, Truck, User, List, ArrowUp, ArrowDown, 
   ClipboardList, Printer, AlertCircle, AlertTriangle, RotateCcw, Lock, LogOut, Users, Shield, Loader, X, Plus, BarChart3,
-  ExternalLink, Menu, ChevronDown, ChevronUp, Clock
+  ExternalLink, Menu, ChevronDown, ChevronUp, Clock, DollarSign, Coins
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import Calendar from 'react-calendar';
@@ -36,6 +36,7 @@ import UserManagerModal from './components/UserManagerModal';
 import { KPIDashboard } from './components/KPIDashboard';
 import { LogisticsRequestsManager } from './components/LogisticsRequestsManager';
 import { LogisticsRequestAlarmModal } from './components/LogisticsRequestAlarmModal';
+import { RouteExpensesModal } from './components/RouteExpensesModal';
 import logoAntko from './assets/images/logo_antko.png';
 
 const formatCLP = (num: number) => {
@@ -289,6 +290,7 @@ export default function App() {
   // States for Resumen de Rutas search
   const [resumenSearch, setResumenSearch] = useState('');
   const [resumenDate, setResumenDate] = useState('');
+  const [showExpensesManifestId, setShowExpensesManifestId] = useState<string | null>(null);
   const [resumenFilterIncompleteProgress, setResumenFilterIncompleteProgress] = useState(false);
   const [resumenFilterIncompleteMileage, setResumenFilterIncompleteMileage] = useState(false);
   const [resumenFiltersCollapsed, setResumenFiltersCollapsed] = useState(true);
@@ -1545,6 +1547,17 @@ export default function App() {
     const driverName = driverMap[manifest.driverId || ''] || 'No asignado';
     const vehicleDesc = vehicleMap[manifest.vehicleId || ''] || 'No asignado';
     const docs = manifest.documentsSnapshot || [];
+    const totalEstVal = docs.reduce((s,d) => d.tipo === 'OC' ? s : s + (d.totalAmount ?? (d.totalPendiente || 0)), 0) || 0;
+    const exp = manifest.expenses;
+    const totalExp = exp ? (
+      (exp.colacion || 0) + 
+      (exp.peaje || 0) + 
+      (exp.reparacion || 0) + 
+      (exp.combustible || 0) + 
+      (exp.otrosAmount1 || 0) + 
+      (exp.otrosAmount2 || 0) + 
+      (exp.otrosAmount3 || 0)
+    ) : 0;
 
     const now = new Date().toLocaleString('es-CL');
     const printContent = `
@@ -1593,6 +1606,55 @@ export default function App() {
             </div>
           </div>
         </div>
+
+        ${manifest.logisticsDataSaved && totalExp > 0 ? `
+          <div style="margin-bottom: 25px; border: 1.5px solid #cbd5e1; border-radius: 12px; overflow: hidden; font-size: 11px;">
+            <div style="background: #f1f5f9; padding: 10px 15px; font-weight: 800; text-transform: uppercase; color: #334155; border-bottom: 1.5px solid #cbd5e1; display: flex; align-items: center; justify-content: space-between;">
+              <span style="letter-spacing: 0.5px;">Resumen de Gastos de Ruta (Informativo)</span>
+              <span style="font-family: monospace; color: #e11d48; font-size: 12px;">Total Gastos: $${Math.round(totalExp).toLocaleString('es-CL')}</span>
+            </div>
+            <div style="padding: 12px 15px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; background: #fafafa;">
+              <div>
+                <p style="margin: 0 0 4px 0; color: #64748b; font-weight: bold; text-transform: uppercase; font-size: 9px;">Colación</p>
+                <b style="font-family: monospace; font-size: 11px;">$${(exp?.colacion || 0).toLocaleString('es-CL')}</b>
+              </div>
+              <div>
+                <p style="margin: 0 0 4px 0; color: #64748b; font-weight: bold; text-transform: uppercase; font-size: 9px;">Peajes / Pórticos</p>
+                <b style="font-family: monospace; font-size: 11px;">$${(exp?.peaje || 0).toLocaleString('es-CL')}</b>
+              </div>
+              <div>
+                <p style="margin: 0 0 4px 0; color: #64748b; font-weight: bold; text-transform: uppercase; font-size: 9px;">Reparación</p>
+                <b style="font-family: monospace; font-size: 11px;">$${(exp?.reparacion || 0).toLocaleString('es-CL')}</b>
+              </div>
+              <div>
+                <p style="margin: 0 0 4px 0; color: #64748b; font-weight: bold; text-transform: uppercase; font-size: 9px;">Combustible</p>
+                <b style="font-family: monospace; font-size: 11px;">$${(exp?.combustible || 0).toLocaleString('es-CL')}</b>
+              </div>
+            </div>
+            ${exp?.otrosAmount1 || exp?.otrosAmount2 || exp?.otrosAmount3 ? `
+              <div style="padding: 10px 15px; background: #ffffff; border-top: 1px solid #cbd5e1; display: flex; flex-wrap: wrap; gap: 20px;">
+                ${exp?.otrosAmount1 ? `
+                  <div style="font-size: 10px;">
+                    <span style="color: #64748b; font-weight: bold;">${exp.otrosDesc1 || 'Otros 1'}:</span>
+                    <b style="font-family: monospace; margin-left: 5px;">$${exp.otrosAmount1.toLocaleString('es-CL')}</b>
+                  </div>
+                ` : ''}
+                ${exp?.otrosAmount2 ? `
+                  <div style="font-size: 10px;">
+                    <span style="color: #64748b; font-weight: bold;">${exp.otrosDesc2 || 'Otros 2'}:</span>
+                    <b style="font-family: monospace; margin-left: 5px;">$${exp.otrosAmount2.toLocaleString('es-CL')}</b>
+                  </div>
+                ` : ''}
+                ${exp?.otrosAmount3 ? `
+                  <div style="font-size: 10px;">
+                    <span style="color: #64748b; font-weight: bold;">${exp.otrosDesc3 || 'Otros 3'}:</span>
+                    <b style="font-family: monospace; margin-left: 5px;">$${exp.otrosAmount3.toLocaleString('es-CL')}</b>
+                  </div>
+                ` : ''}
+              </div>
+            ` : ''}
+          </div>
+        ` : ''}
         
         <table style="width: 100%; border-collapse: collapse; margin-bottom: 30px;">
           <thead>
@@ -1630,13 +1692,33 @@ export default function App() {
           </tbody>
         </table>
         
-        <div style="display: flex; justify-content: space-between; align-items: flex-end; border-top: 1px dashed #cbd5e1; padding-top: 20px;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; border-top: 1px dashed #cbd5e1; padding-top: 20px;">
           <div style="font-size: 11px; line-height: 1.6;">
-            <p style="margin: 0;">Cantidad de puntos totales: <b>${manifest.totalPoints ?? docs.length}</b></p>
-            <p style="margin: 0; color: #e11d48;">Cantidad de puntos pendientes: <b>${manifest.pendingPoints ?? 0}</b></p>
+            <p style="margin: 0;">Cantidad de puntos totales: <b>${docs.length}</b></p>
+            <p style="margin: 0; color: #10b981;">Puntos completados: <b>${docs.filter(d => ['ENTREGADO', 'RETIRADO'].includes(d.trackingStatus || '')).length}</b></p>
+            <p style="margin: 0; color: #e11d48;">Puntos con problemas/pendientes: <b>${docs.filter(d => !['ENTREGADO', 'RETIRADO'].includes(d.trackingStatus || '')).length}</b></p>
           </div>
-          <div style="text-align: right; font-size: 11px;">
-            <p style="margin: 5px 0 0 0; color: #94a3b8; font-size: 9px;">Gestion Logistica - Antko</p>
+          
+          <div style="text-align: right; line-height: 1.8; font-size: 11px;">
+            ${manifest.logisticsDataSaved ? `
+              <div style="background: #f8fafc; padding: 12px 15px; border: 1px solid #e2e8f0; border-radius: 8px; min-width: 280px; text-align: left; display: inline-block;">
+                <h4 style="margin: 0 0 8px 0; font-size: 11px; text-transform: uppercase; color: #475569; border-bottom: 1.5px solid #e2e8f0; padding-bottom: 4px; font-weight: 800;">Resumen Financiero (Ruta Cerrada)</h4>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                  <span style="color: #64748b;">Monto Total de la Carga:</span>
+                  <b style="font-family: monospace; color: #4f46e5;">$${Math.round(totalEstVal).toLocaleString('es-CL')}</b>
+                </div>
+                ${totalExp > 0 ? `
+                  <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                    <span style="color: #64748b;">Gastos de Ruta (Informativo):</span>
+                    <b style="font-family: monospace; color: #e11d48;">$${Math.round(totalExp).toLocaleString('es-CL')}</b>
+                  </div>
+                ` : ''}
+              </div>
+            ` : `
+              <p style="margin: 0; color: #e11d48; font-weight: bold; font-size: 10px; text-transform: uppercase;">[Ruta en Tránsito / No Cerrada]</p>
+              <p style="margin: 4px 0 0 0; color: #64748b; font-size: 10px;">Para imprimir los totales financieros, la ruta debe ser Guardada y Cerrada.</p>
+            `}
+            <p style="margin: 10px 0 0 0; color: #94a3b8; font-size: 9px;">Gestion Logistica - Antko</p>
           </div>
         </div>
       </div>
@@ -2423,6 +2505,21 @@ export default function App() {
                 documentsSnapshot: snapshot,
                 pendingPoints: pendingCount
               });
+            }}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showExpensesManifestId && manifests[showExpensesManifestId] && (
+          <RouteExpensesModal
+            isOpen={!!showExpensesManifestId}
+            onClose={() => setShowExpensesManifestId(null)}
+            manifest={manifests[showExpensesManifestId]}
+            isAdmin={userProfile?.role === 'ADMIN'}
+            onSave={(expenses) => {
+              handleUpdateManifestField(showExpensesManifestId, 'expenses', expenses);
+              showToast("Gastos Guardados", "Los gastos de la ruta se han guardado de manera exitosa.", 'success');
             }}
           />
         )}
@@ -4944,6 +5041,17 @@ export default function App() {
                           const pendingPoints = totalPoints - completedPoints;
                           const totalEstVal = manifest.documentsSnapshot?.reduce((s,d) => d.tipo === 'OC' ? s : s + (d.totalAmount ?? d.totalPendiente), 0) || 0;
                           
+                          const exp = manifest.expenses;
+                          const totalExp = exp ? (
+                            (exp.colacion || 0) + 
+                            (exp.peaje || 0) + 
+                            (exp.reparacion || 0) + 
+                            (exp.combustible || 0) + 
+                            (exp.otrosAmount1 || 0) + 
+                            (exp.otrosAmount2 || 0) + 
+                            (exp.otrosAmount3 || 0)
+                          ) : 0;
+                          
                           const hasMissingFailedReasons = manifest.documentsSnapshot?.some(d => {
                             const isFailed = d.trackingStatus === 'NO ENTREGADO' || d.trackingStatus === 'NO RETIRADO';
                             if (!isFailed) return false;
@@ -5106,7 +5214,12 @@ export default function App() {
                                 </div>
                               </td>
                               <td className="px-4 py-4 text-right">
-                                <p className="font-bold text-indigo-700 font-mono">${Math.round(totalEstVal).toLocaleString('es-CL')}</p>
+                                <p className="font-bold text-indigo-700 font-mono" title="Monto Total Carga">${Math.round(totalEstVal).toLocaleString('es-CL')}</p>
+                                {totalExp > 0 && (
+                                  <p className="text-rose-600 font-black font-mono text-[10px]" title="Gastos de Ruta">
+                                    Gastos: -${Math.round(totalExp).toLocaleString('es-CL')}
+                                  </p>
+                                )}
                                 <p className="text-slate-400 font-mono text-[9px]">{manifest.documentsSnapshot?.length ?? 0} doctos</p>
                               </td>
                               <td className="px-4 py-4">
@@ -5142,6 +5255,14 @@ export default function App() {
                                       <Save className="w-4 h-4" />
                                     </button>
                                   )}
+                                  <button 
+                                    type="button"
+                                    onClick={() => setShowExpensesManifestId(mId)}
+                                    className="p-2 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all cursor-pointer"
+                                    title="Registrar / Ver Gastos de Ruta"
+                                  >
+                                    <DollarSign className="w-4 h-4" />
+                                  </button>
                                   <button 
                                     type="button"
                                     onClick={() => handlePrintFinalizedReport(manifest)}
@@ -5183,6 +5304,17 @@ export default function App() {
                       ).length ?? 0;
                       const pendingPoints = totalPoints - completedPoints;
                       const totalEstVal = manifest.documentsSnapshot?.reduce((s,d) => d.tipo === 'OC' ? s : s + (d.totalAmount ?? d.totalPendiente), 0) || 0;
+                      
+                      const exp = manifest.expenses;
+                      const totalExp = exp ? (
+                        (exp.colacion || 0) + 
+                        (exp.peaje || 0) + 
+                        (exp.reparacion || 0) + 
+                        (exp.combustible || 0) + 
+                        (exp.otrosAmount1 || 0) + 
+                        (exp.otrosAmount2 || 0) + 
+                        (exp.otrosAmount3 || 0)
+                      ) : 0;
                       
                       const hasMissingFailedReasons = manifest.documentsSnapshot?.some(d => {
                         const isFailed = d.trackingStatus === 'NO ENTREGADO' || d.trackingStatus === 'NO RETIRADO';
@@ -5239,6 +5371,11 @@ export default function App() {
                             
                             <div className="flex flex-col items-end shrink-0 gap-1 text-right">
                               <span className="font-mono text-xs sm:text-sm font-black text-indigo-700">${Math.round(totalEstVal).toLocaleString('es-CL')}</span>
+                              {totalExp > 0 && (
+                                <span className="text-[10px] font-black text-rose-600 font-mono">
+                                  Gastos: -${Math.round(totalExp).toLocaleString('es-CL')}
+                                </span>
+                              )}
                               <span className="text-[10px] text-slate-400 font-mono">{manifest.documentsSnapshot?.length ?? 0} doctos</span>
                               
                               <div className="mt-1 flex items-center gap-1.5">
@@ -5363,6 +5500,59 @@ export default function App() {
                                 </button>
                               </div>
 
+                              <div className="bg-white p-3.5 rounded-xl border border-slate-200/60 shadow-sm flex flex-col gap-3">
+                                <h4 className="text-[11px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                                  <Coins className="w-3.5 h-3.5 text-indigo-500" /> Resumen de Gastos de Ruta
+                                </h4>
+                                <div className="text-xs text-slate-600 space-y-1.5">
+                                  <div className="flex justify-between border-b border-slate-100 pb-1">
+                                    <span>Colación:</span>
+                                    <span className="font-mono font-bold">${(exp?.colacion || 0).toLocaleString('es-CL')}</span>
+                                  </div>
+                                  <div className="flex justify-between border-b border-slate-100 pb-1">
+                                    <span>Peajes:</span>
+                                    <span className="font-mono font-bold">${(exp?.peaje || 0).toLocaleString('es-CL')}</span>
+                                  </div>
+                                  <div className="flex justify-between border-b border-slate-100 pb-1">
+                                    <span>Reparación:</span>
+                                    <span className="font-mono font-bold">${(exp?.reparacion || 0).toLocaleString('es-CL')}</span>
+                                  </div>
+                                  <div className="flex justify-between border-b border-slate-100 pb-1">
+                                    <span>Combustible:</span>
+                                    <span className="font-mono font-bold">${(exp?.combustible || 0).toLocaleString('es-CL')}</span>
+                                  </div>
+                                  {exp?.otrosAmount1 ? (
+                                    <div className="flex justify-between border-b border-slate-100 pb-1">
+                                      <span className="truncate max-w-[150px]">{exp.otrosDesc1 || 'Otros 1'}:</span>
+                                      <span className="font-mono font-bold">${(exp.otrosAmount1).toLocaleString('es-CL')}</span>
+                                    </div>
+                                  ) : null}
+                                  {exp?.otrosAmount2 ? (
+                                    <div className="flex justify-between border-b border-slate-100 pb-1">
+                                      <span className="truncate max-w-[150px]">{exp.otrosDesc2 || 'Otros 2'}:</span>
+                                      <span className="font-mono font-bold">${(exp.otrosAmount2).toLocaleString('es-CL')}</span>
+                                    </div>
+                                  ) : null}
+                                  {exp?.otrosAmount3 ? (
+                                    <div className="flex justify-between border-b border-slate-100 pb-1">
+                                      <span className="truncate max-w-[150px]">{exp.otrosDesc3 || 'Otros 3'}:</span>
+                                      <span className="font-mono font-bold">${(exp.otrosAmount3).toLocaleString('es-CL')}</span>
+                                    </div>
+                                  ) : null}
+                                  <div className="flex justify-between pt-1 font-extrabold text-indigo-700">
+                                    <span>TOTAL GASTOS:</span>
+                                    <span className="font-mono">${(totalExp).toLocaleString('es-CL')}</span>
+                                  </div>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => setShowExpensesManifestId(mId)}
+                                  className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white p-2.5 rounded-xl text-[11px] font-black uppercase tracking-wider shadow-sm active:scale-95 transition-all cursor-pointer font-sans"
+                                >
+                                  <Coins className="w-3.5 h-3.5" /> Editar / Registrar Gastos
+                                </button>
+                              </div>
+
                               <div className="flex items-center gap-2 mt-2">
                                 {manifest.logisticsDataSaved ? (
                                   <div className="flex-1 flex items-center justify-center gap-2 bg-emerald-50 text-emerald-700 p-3 rounded-xl border border-emerald-200 text-xs font-black uppercase tracking-wider">
@@ -5391,6 +5581,15 @@ export default function App() {
                                     <Save className="w-4 h-4" /> Guardar y Cerrar
                                   </button>
                                 )}
+
+                                <button 
+                                  type="button"
+                                  onClick={() => setShowExpensesManifestId(mId)}
+                                  className="p-3.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 hover:text-emerald-600 rounded-xl transition-all cursor-pointer shadow-sm active:scale-95 flex items-center justify-center"
+                                  title="Registrar / Ver Gastos de Ruta"
+                                >
+                                  <DollarSign className="w-4.5 h-4.5" />
+                                </button>
 
                                 <button 
                                   type="button"

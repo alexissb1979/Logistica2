@@ -39,6 +39,26 @@ export interface LogisticsVehicle {
   createdAt?: any;
 }
 
+export interface RouteExpenses {
+  colacion: number;
+  colacionList?: number[];
+  peaje: number;
+  peajeList?: number[];
+  reparacion: number;
+  reparacionList?: number[];
+  combustible: number;
+  combustibleList?: number[];
+  otrosAmount1?: number;
+  otrosList1?: number[];
+  otrosDesc1?: string;
+  otrosAmount2?: number;
+  otrosList2?: number[];
+  otrosDesc2?: string;
+  otrosAmount3?: number;
+  otrosList3?: number[];
+  otrosDesc3?: string;
+}
+
 export interface LogisticsManifest {
   id: string; // generated as routeId_date
   driverId: string;
@@ -54,6 +74,7 @@ export interface LogisticsManifest {
   totalPoints?: number;
   initialKm?: number;
   finalKm?: number;
+  expenses?: RouteExpenses;
   documentsSnapshot?: {
     id: string;
     tipo: string;
