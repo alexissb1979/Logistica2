@@ -781,7 +781,7 @@ export default function App() {
       
       let matchesMileage = true;
       if (resumenFilterIncompleteMileage) {
-        matchesMileage = !m.initialMileage || !m.finalMileage || m.finalMileage <= m.initialMileage;
+        matchesMileage = !m.initialKm || !m.finalKm || m.finalKm <= m.initialKm;
       }
 
       return matchesSearch && matchesDate && matchesProgress && matchesMileage;
