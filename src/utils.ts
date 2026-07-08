@@ -179,8 +179,8 @@ export const analyzeRawRows = (
       };
 
       const fieldMapping = {
-        folio: findKey(['folio', 'documento', 'numdoc']),
-        numNota: findKey(['numnota', 'nro_nota', 'nota']),
+        folio: findKey(type === 'OC' ? ['numoc', 'num_oc', 'nro_oc', 'oc', 'numordc', 'num_ord_c', 'orden_compra', 'orden', 'folio', 'documento', 'numdoc'] : ['folio', 'documento', 'numdoc']),
+        numNota: findKey(type === 'OC' ? ['numoc', 'num_oc', 'nro_oc', 'oc', 'numordc', 'num_ord_c', 'orden_compra', 'orden', 'numnota', 'nro_nota', 'nota'] : ['numnota', 'nro_nota', 'nota']),
         razonSocial: findKey(['razsoc', 'razon social', 'cliente', 'nombre']),
         vendedor: findKey(['nom_vended', 'nomvended', 'vendedor']),
         fecha: findKey(['fecha', 'fecdoc', 'fecemision', 'emision', 'factual']),
@@ -190,7 +190,7 @@ export const analyzeRawRows = (
         descripcion: findKey(['descripcion', 'glosa', 'detalle', 'prod', 'descr', 'nombre', 'producto', 'articulo', 'nombrearticu', 'nombreproducto']),
         cantidad: findKey(['cantidad', 'cant', 'qty', 'unidades', 'unid', 'cant_pend']),
         cantReci: findKey(['cantreci', 'recibida']),
-        precio: findKey(['precio', 'valor', 'unitario']),
+        precio: findKey(type === 'OC' ? ['precunit', 'prec_unit', 'precio', 'valor', 'unitario'] : ['precio', 'valor', 'unitario']),
         totalLinea: findKey(['totallinea', 'subtotal', 'lineatotal'])
       };
 
@@ -267,12 +267,17 @@ export const analyzeRawRows = (
             if (type === 'OC' && fieldMapping.cantReci) finalCantidad -= parseFloat(String(row[fieldMapping.cantReci] || '0')) || 0;
           }
 
+          const price = fieldMapping.precio ? (parseFloat(String(row[fieldMapping.precio] || '0')) || 0) : 0;
+          const totalLineValue = fieldMapping.totalLinea 
+            ? (parseFloat(String(row[fieldMapping.totalLinea] || '0')) || 0)
+            : (type === 'OC' ? finalCantidad * price : 0);
+
           doc.detalle.push({
             codigo: fieldMapping.codigo ? String(row[fieldMapping.codigo] || '') : '',
             descripcion: fieldMapping.descripcion ? String(row[fieldMapping.descripcion] || '') : '',
             cantidad: finalCantidad,
-            precio: fieldMapping.precio ? (parseFloat(String(row[fieldMapping.precio] || '0')) || 0) : 0,
-            total: fieldMapping.totalLinea ? (parseFloat(String(row[fieldMapping.totalLinea] || '0')) || 0) : 0
+            precio: price,
+            total: totalLineValue
           });
         }
 
