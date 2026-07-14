@@ -257,7 +257,8 @@ export default function App() {
     razonSocial: '',
     guideNumber: '',
     location: '',
-    logisticsNotes: ''
+    logisticsNotes: '',
+    deliveryStatus: 'COMPLETO' as 'COMPLETO' | 'PARCIAL'
   });
   const [newPointAmountStr, setNewPointAmountStr] = useState('');
   const showManifestDetail = useMemo(() => {
@@ -2344,6 +2345,7 @@ export default function App() {
       logisticsNotes: newPoint.logisticsNotes.trim() || '',
       location: newPoint.location.trim().toUpperCase() || '',
       orderIndex: existingSnapshot.length + 1,
+      deliveryStatus: newPoint.deliveryStatus,
       isAdditional: true
     };
 
@@ -2377,7 +2379,8 @@ export default function App() {
         razonSocial: '',
         guideNumber: '',
         location: '',
-        logisticsNotes: ''
+        logisticsNotes: '',
+        deliveryStatus: 'COMPLETO'
       });
       setNewPointAmountStr('');
       setShowAddPointForm(false);
@@ -4516,6 +4519,18 @@ export default function App() {
                                 />
                              </div>
 
+                             <div className="col-span-1 md:col-span-2 flex flex-col gap-1">
+                                <label className="text-[10px] font-black text-indigo-500 uppercase tracking-wider">Estado Entrega</label>
+                                <select 
+                                   value={newPoint.deliveryStatus}
+                                   onChange={(e) => setNewPoint({...newPoint, deliveryStatus: e.target.value as any})}
+                                   className="w-full bg-white border border-indigo-200 rounded-lg px-3 py-1.5 text-xs font-bold text-indigo-700 outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-sm transition-all cursor-pointer"
+                                >
+                                   <option value="COMPLETO">COMPLETO</option>
+                                   <option value="PARCIAL">PARCIAL</option>
+                                </select>
+                             </div>
+
                              <div className="col-span-1 md:col-span-2 flex flex-col justify-end">
                                 <button 
                                    onClick={() => handleAddAdditionalPoint(hrSelectedRoute, hrSelectedDate)}
@@ -4590,7 +4605,7 @@ export default function App() {
                                 <p className={`text-[10px] font-mono font-bold ${doc.isMissingFromImport ? 'text-rose-600 font-extrabold' : doc.tipo === 'OC' ? 'text-teal-600' : 'text-indigo-500'}`}>{formatDocId(doc.tipo, doc.id)}</p>
                               </div>
 
-                              {doc.tipo !== 'OC' && (
+                              {(doc.tipo !== 'OC' || doc.isAdditional) && (
                                 <>
                                   <div className="md:col-span-2 grid grid-cols-2 md:grid-cols-1 gap-2 md:gap-0">
                                     <div className="flex flex-col">
@@ -4647,7 +4662,7 @@ export default function App() {
                                 />
                               </div>
 
-                              {doc.tipo !== 'OC' && (
+                              {(doc.tipo !== 'OC' || doc.isAdditional) && (
                                 <div className="md:col-span-2 text-right">
                                   <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Total</p>
                                   <input 
@@ -4697,9 +4712,9 @@ export default function App() {
                                   <div className="bg-slate-50 border border-slate-100 rounded-xl p-2.5 flex flex-col gap-2">
                                     <div className="flex justify-between items-center text-[11px] text-slate-600 font-medium">
                                       <span>Guía: <span className="font-black text-slate-800">{doc.assignment?.guideNumber || 'Sin guía'}</span></span>
-                                      {doc.tipo !== 'OC' && (
-                                        <span>Total: <span className="font-mono font-black text-indigo-600">${(doc.assignment?.totalAmount !== undefined ? doc.assignment.totalAmount : doc.totalPendiente).toLocaleString('es-CL')}</span></span>
-                                      )}
+                                    {(doc.tipo !== 'OC' || doc.isAdditional) && (
+                                      <span>Total: <span className="font-mono font-black text-indigo-600">${(doc.assignment?.totalAmount !== undefined ? doc.assignment.totalAmount : doc.totalPendiente).toLocaleString('es-CL')}</span></span>
+                                    )}
                                     </div>
                                     <div className="h-px bg-slate-100"></div>
                                     <div className="flex flex-col gap-1 text-[11px] text-slate-500">
@@ -4743,7 +4758,7 @@ export default function App() {
                                   </div>
 
                                   <div className="flex flex-col gap-2">
-                                    {doc.tipo !== 'OC' && (
+                                    {(doc.tipo !== 'OC' || doc.isAdditional) && (
                                       <div className="grid grid-cols-2 gap-2">
                                         <div className="flex flex-col gap-1">
                                           <label className="text-[9px] font-black text-slate-500 uppercase">N° Guía</label>
@@ -4792,7 +4807,7 @@ export default function App() {
                                       />
                                     </div>
 
-                                    {doc.tipo !== 'OC' && (
+                                    {(doc.tipo !== 'OC' || doc.isAdditional) && (
                                       <div className="flex flex-col gap-1">
                                         <label className="text-[9px] font-black text-slate-500 uppercase">Total Valorizado ($)</label>
                                         <input 
