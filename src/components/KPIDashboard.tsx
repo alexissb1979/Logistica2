@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   TrendingUp, 
+  TrendingDown,
   DollarSign, 
   Truck, 
   CheckCircle2, 
@@ -25,7 +26,16 @@ import {
   MapPin,
   RotateCcw,
   FileText,
-  XCircle
+  XCircle,
+  BarChart2,
+  ArrowUpRight,
+  ArrowDownRight,
+  Activity,
+  Layers,
+  Percent,
+  ArrowUpDown,
+  Coins,
+  Table
 } from 'lucide-react';
 import { 
   ResponsiveContainer, 
@@ -45,31 +55,77 @@ import {
   Area,
   ComposedChart
 } from 'recharts';
-import { LogisticsManifest } from '../types';
+import { LogisticsManifest, LogisticsVehicle, LogisticsRoute } from '../types';
 
 interface KPIDashboardProps {
   manifestsList: LogisticsManifest[];
   routeMap: Record<string, string>;
   driverMap: Record<string, string>;
   vehicleMap: Record<string, string>;
+  fuelCosts?: Record<string, Record<string, Record<string, number>>>;
+  vehicles?: LogisticsVehicle[];
+  routes?: LogisticsRoute[];
 }
 
 export const KPIDashboard: React.FC<KPIDashboardProps> = ({
   manifestsList,
   routeMap,
   driverMap,
-  vehicleMap
+  vehicleMap,
+  fuelCosts = {},
+  vehicles = [],
+  routes = []
 }) => {
   // Filters
   const [selectedDriver, setSelectedDriver] = useState<string>('ALL');
   const [selectedRoute, setSelectedRoute] = useState<string>('ALL');
   const [timeSpan, setTimeSpan] = useState<'ALL' | 'LAST_7' | 'LAST_30' | 'THIS_MONTH' | 'UNTIL_YESTERDAY'>('ALL');
+  const [selectedMonthFilter, setSelectedMonthFilter] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [filtersCollapsed, setFiltersCollapsed] = useState(true);
 
+  // Table Sorting States
+  const [driverSortField, setDriverSortField] = useState<'Chofer' | 'Rutas' | 'Documentos' | 'Entregas' | 'Entregas (%)' | 'Retiros' | 'Retiros (%)' | 'Km Promedio' | 'Efectividad (%)'>('Efectividad (%)');
+  const [driverSortDir, setDriverSortDir] = useState<'asc' | 'desc'>('desc');
+  const [driverViewMode, setDriverViewMode] = useState<'TABLE' | 'CHART'>('TABLE');
+
+  const [vehicleSortField, setVehicleSortField] = useState<'Vehiculo' | 'Rutas' | 'Km Totales' | 'Carga Total Valor ($)' | 'Costo Combustible ($)' | 'Efectividad (%)'>('Rutas');
+  const [vehicleSortDir, setVehicleSortDir] = useState<'asc' | 'desc'>('desc');
+
+  const [fleetFuelSortField, setFleetFuelSortField] = useState<'Vehiculo' | 'Km Totales' | 'Rendimiento Nominal' | 'Litros Teoricos' | 'Costo Combustible ($)' | 'Litros Reales Est' | 'Rendimiento Observado' | 'Desviacion Pct'>('Km Totales');
+  const [fleetFuelSortDir, setFleetFuelSortDir] = useState<'asc' | 'desc'>('desc');
+
+  const [routeSortField, setRouteSortField] = useState<'Ruta' | 'Viajes' | 'Documentos' | 'Carga Total ($)' | 'Efectividad (%)'>('Viajes');
+  const [routeSortDir, setRouteSortDir] = useState<'asc' | 'desc'>('desc');
+  const [routeViewMode, setRouteViewMode] = useState<'TABLE' | 'CHART'>('TABLE');
+
+  // Monthly Comparison View Controls
+  const [selectedMonthRange, setSelectedMonthRange] = useState<'ALL' | 'LAST_3' | 'LAST_6' | 'THIS_YEAR'>('ALL');
+  const [monthlyTab, setMonthlyTab] = useState<'CHARTS' | 'TABLE'>('CHARTS');
+
+  // Available Months for Dropdown Filter
+  const availableMonthFilters = useMemo(() => {
+    const monthSet = new Set<string>();
+    manifestsList.forEach(m => {
+      if (m.date && m.date.length >= 7) {
+        monthSet.add(m.date.substring(0, 7)); // "YYYY-MM"
+      }
+    });
+    return Array.from(monthSet).sort().reverse();
+  }, [manifestsList]);
+
+  // Destination Normalization Helper
+  const normalizeDestinationName = (name: string): string => {
+    if (!name) return 'Sin asignar';
+    let cleaned = name.replace(/\s*\(\d+\)\s*$/g, '');
+    cleaned = cleaned.replace(/\s*-\s*\d+\s*$/g, '');
+    cleaned = cleaned.trim().toUpperCase();
+    return cleaned || 'Sin asignar';
+  };
+
   // Modal detail states for clicking charts
   const [activeDetailFilter, setActiveDetailFilter] = useState<{
-    type: 'date' | 'status' | 'route' | 'vehicle' | 'driver';
+    type: 'date' | 'status' | 'route' | 'vehicle' | 'driver' | 'month';
     value: string;
     title: string;
   } | null>(null);
@@ -87,6 +143,7 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
     setSelectedDriver('ALL');
     setSelectedRoute('ALL');
     setTimeSpan('ALL');
+    setSelectedMonthFilter('ALL');
     setSearchQuery('');
   };
 
@@ -108,6 +165,11 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
       // Route filter
       if (selectedRoute !== 'ALL' && m.routeId !== selectedRoute) return false;
       
+      // Month filter
+      if (selectedMonthFilter !== 'ALL') {
+        if (!m.date || !m.date.startsWith(selectedMonthFilter)) return false;
+      }
+
       // Time span filter
       if (m.date) {
         const manifestDate = new Date(m.date + 'T12:00:00');
@@ -147,7 +209,7 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
 
       return true;
     });
-  }, [manifestsList, selectedDriver, selectedRoute, timeSpan, searchQuery, routeMap, driverMap, vehicleMap]);
+  }, [manifestsList, selectedDriver, selectedRoute, selectedMonthFilter, timeSpan, searchQuery, routeMap, driverMap, vehicleMap]);
 
   // Unique list of drivers and routes for select dropdowns
   const availableDrivers = useMemo(() => {
@@ -235,9 +297,61 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
     const successRate = rawTotalDocs > 0 ? Math.round((deliveredDocs / rawTotalDocs) * 100) : 0;
     const failureRate = rawTotalDocs > 0 ? Math.round((failedDocs / rawTotalDocs) * 100) : 0;
     const avgKmPerRoute = routesWithKm > 0 ? Math.round(totalKilometers / routesWithKm) : 0;
+    const valuePerKm = totalKilometers > 0 ? Math.round(totalValue / totalKilometers) : 0;
+    const avgDocsPerRoute = processedData.length > 0 ? Number((rawTotalDocs / processedData.length).toFixed(1)) : 0;
+    const avgValuePerRoute = processedData.length > 0 ? Math.round(totalValue / processedData.length) : 0;
     
     // Average duration in hours and minutes
     const avgDurationHours = routesWithTime > 0 ? (totalTimeInMinutes / routesWithTime / 60) : 0;
+
+    // Calculate Fuel Costs for current scope
+    let totalFuelCost = 0;
+    if (fuelCosts && Object.keys(fuelCosts).length > 0) {
+      if (selectedMonthFilter !== 'ALL') {
+        const [yr, mo] = selectedMonthFilter.split('-');
+        const yearCosts = fuelCosts[yr];
+        if (yearCosts) {
+          Object.values(yearCosts).forEach(plateObj => {
+            if (plateObj && plateObj[mo]) {
+              totalFuelCost += Number(plateObj[mo]) || 0;
+            }
+          });
+        }
+      } else {
+        const monthsInFilteredData = new Set<string>();
+        processedData.forEach(m => {
+          if (m.date && m.date.length >= 7) {
+            monthsInFilteredData.add(m.date.substring(0, 7));
+          }
+        });
+        if (monthsInFilteredData.size > 0) {
+          monthsInFilteredData.forEach(ym => {
+            const [yr, mo] = ym.split('-');
+            const yearCosts = fuelCosts[yr];
+            if (yearCosts) {
+              Object.values(yearCosts).forEach(plateObj => {
+                if (plateObj && plateObj[mo]) {
+                  totalFuelCost += Number(plateObj[mo]) || 0;
+                }
+              });
+            }
+          });
+        } else {
+          Object.values(fuelCosts).forEach(yearObj => {
+            Object.values(yearObj).forEach(plateObj => {
+              Object.values(plateObj).forEach(val => {
+                totalFuelCost += Number(val) || 0;
+              });
+            });
+          });
+        }
+      }
+    }
+
+    const fuelCostPerKm = totalKilometers > 0 ? Math.round(totalFuelCost / totalKilometers) : 0;
+    const fuelCostPerRoute = processedData.length > 0 ? Math.round(totalFuelCost / processedData.length) : 0;
+    const fuelCostPerDoc = rawTotalDocs > 0 ? Math.round(totalFuelCost / rawTotalDocs) : 0;
+    const fuelCostToValuePct = totalValue > 0 ? Number(((totalFuelCost / totalValue) * 100).toFixed(2)) : 0;
 
     return {
       totalRoutes: processedData.length,
@@ -249,11 +363,212 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
       totalValue,
       totalKilometers,
       avgKmPerRoute,
+      valuePerKm,
+      avgDocsPerRoute,
+      avgValuePerRoute,
       avgDurationHours,
       successRate,
-      failureRate
+      failureRate,
+      totalFuelCost,
+      fuelCostPerKm,
+      fuelCostPerRoute,
+      fuelCostPerDoc,
+      fuelCostToValuePct
     };
-  }, [processedData]);
+  }, [processedData, fuelCosts, selectedMonthFilter]);
+
+  // Month Name Formatting Helper
+  const MONTH_NAMES_ES = useMemo(() => [
+    'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+    'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+  ], []);
+
+  const formatMonthKey = (yearMonthKey: string) => {
+    if (!yearMonthKey || !yearMonthKey.includes('-')) return yearMonthKey || '';
+    const [y, m] = yearMonthKey.split('-');
+    const monthIdx = parseInt(m, 10) - 1;
+    if (isNaN(monthIdx) || monthIdx < 0 || monthIdx > 11) return yearMonthKey;
+    return `${MONTH_NAMES_ES[monthIdx]} ${y}`;
+  };
+
+  // Multi-Month Aggregations & MoM Variance Calculations
+  const monthlyStatsData = useMemo(() => {
+    const monthGroups: Record<string, {
+      yearMonth: string;
+      totalRoutes: number;
+      totalDocuments: number;
+      deliveredDocs: number;
+      retiradosDocs: number;
+      failedDocs: number;
+      totalValue: number;
+      totalKm: number;
+      routesWithKm: number;
+      totalTimeMinutes: number;
+      routesWithTime: number;
+    }> = {};
+
+    processedData.forEach(m => {
+      if (!m.date) return;
+      const yearMonth = m.date.substring(0, 7); // "YYYY-MM"
+      if (!monthGroups[yearMonth]) {
+        monthGroups[yearMonth] = {
+          yearMonth,
+          totalRoutes: 0,
+          totalDocuments: 0,
+          deliveredDocs: 0,
+          retiradosDocs: 0,
+          failedDocs: 0,
+          totalValue: 0,
+          totalKm: 0,
+          routesWithKm: 0,
+          totalTimeMinutes: 0,
+          routesWithTime: 0
+        };
+      }
+
+      const grp = monthGroups[yearMonth];
+      grp.totalRoutes++;
+
+      const docs = m.documentsSnapshot || [];
+      grp.totalDocuments += docs.length;
+
+      docs.forEach(d => {
+        const status = d.trackingStatus;
+        if (status === 'ENTREGADO' || status === 'COMPLETO') {
+          grp.deliveredDocs++;
+        } else if (status === 'RETIRADO') {
+          grp.deliveredDocs++;
+          grp.retiradosDocs++;
+        } else if (status === 'NO ENTREGADO' || status === 'NO RETIRADO') {
+          grp.failedDocs++;
+        }
+
+        const amt = d.tipo === 'OC' ? 0 : (d.totalAmount ?? d.totalPendiente ?? 0);
+        grp.totalValue += amt;
+      });
+
+      if (m.initialKm !== undefined && m.finalKm !== undefined && m.finalKm >= m.initialKm) {
+        grp.totalKm += (m.finalKm - m.initialKm);
+        grp.routesWithKm++;
+      }
+
+      if (m.startTime && m.endTime) {
+        const parseTime = (t: string) => {
+          const [h, min] = t.split(':').map(Number);
+          return (h * 60) + (min || 0);
+        };
+        const startMin = parseTime(m.startTime);
+        const endMin = parseTime(m.endTime);
+        if (endMin > startMin) {
+          grp.totalTimeMinutes += (endMin - startMin);
+          grp.routesWithTime++;
+        }
+      }
+    });
+
+    const sortedKeys = Object.keys(monthGroups).sort();
+
+    return sortedKeys.map((key, idx) => {
+      const current = monthGroups[key];
+      const prev = idx > 0 ? monthGroups[sortedKeys[idx - 1]] : null;
+
+      const otifRate = current.totalDocuments > 0 
+        ? Math.round((current.deliveredDocs / current.totalDocuments) * 100) 
+        : 0;
+      
+      const prevOtifRate = prev && prev.totalDocuments > 0 
+        ? Math.round((prev.deliveredDocs / prev.totalDocuments) * 100) 
+        : null;
+
+      const avgValPerRoute = current.totalRoutes > 0 
+        ? Math.round(current.totalValue / current.totalRoutes) 
+        : 0;
+
+      const avgKmPerRoute = current.routesWithKm > 0 
+        ? Math.round(current.totalKm / current.routesWithKm) 
+        : 0;
+
+      const valuePerKm = current.totalKm > 0 
+        ? Math.round(current.totalValue / current.totalKm) 
+        : 0;
+      
+      const prevValuePerKm = prev && prev.totalKm > 0 
+        ? Math.round(current.totalValue / current.totalKm) 
+        : null;
+
+      const avgDocsPerRoute = current.totalRoutes > 0 
+        ? Number((current.totalDocuments / current.totalRoutes).toFixed(1)) 
+        : 0;
+
+      const avgTimeHours = current.routesWithTime > 0 
+        ? Number((current.totalTimeMinutes / current.routesWithTime / 60).toFixed(1)) 
+        : 0;
+
+      // MoM Percentage Calculations
+      const valueMoM = prev && prev.totalValue > 0 
+        ? Number((((current.totalValue - prev.totalValue) / prev.totalValue) * 100).toFixed(1)) 
+        : null;
+
+      const otifMoM = prevOtifRate !== null 
+        ? Number((otifRate - prevOtifRate).toFixed(1)) 
+        : null;
+
+      const routesMoM = prev && prev.totalRoutes > 0 
+        ? Number((((current.totalRoutes - prev.totalRoutes) / prev.totalRoutes) * 100).toFixed(1)) 
+        : null;
+
+      const valPerKmMoM = prevValuePerKm !== null && prevValuePerKm > 0 
+        ? Number((((valuePerKm - prevValuePerKm) / prevValuePerKm) * 100).toFixed(1)) 
+        : null;
+
+      return {
+        yearMonth: key,
+        monthLabel: formatMonthKey(key),
+        shortMonthLabel: formatMonthKey(key).split(' ')[0],
+        totalRoutes: current.totalRoutes,
+        totalDocuments: current.totalDocuments,
+        deliveredDocs: current.deliveredDocs,
+        retiradosDocs: current.retiradosDocs,
+        failedDocs: current.failedDocs,
+        otifRate,
+        totalValue: current.totalValue,
+        totalValueM: Math.round(current.totalValue / 1000), // M$
+        avgValPerRoute,
+        totalKm: current.totalKm,
+        avgKmPerRoute,
+        valuePerKm,
+        avgDocsPerRoute,
+        avgTimeHours,
+        // MoM metadata
+        prevMonthLabel: prev ? formatMonthKey(prev.yearMonth) : null,
+        valueMoM,
+        otifMoM,
+        routesMoM,
+        valPerKmMoM
+      };
+    });
+  }, [processedData, MONTH_NAMES_ES]);
+
+  // Filtered dataset for monthly comparison
+  const filteredMonthlyStats = useMemo(() => {
+    if (selectedMonthRange === 'LAST_3') {
+      return monthlyStatsData.slice(-3);
+    }
+    if (selectedMonthRange === 'LAST_6') {
+      return monthlyStatsData.slice(-6);
+    }
+    if (selectedMonthRange === 'THIS_YEAR') {
+      const currentYear = new Date().getFullYear().toString();
+      return monthlyStatsData.filter(m => m.yearMonth.startsWith(currentYear));
+    }
+    return monthlyStatsData;
+  }, [monthlyStatsData, selectedMonthRange]);
+
+  // Latest month MoM summary
+  const latestMoM = useMemo(() => {
+    if (monthlyStatsData.length < 2) return null;
+    return monthlyStatsData[monthlyStatsData.length - 1];
+  }, [monthlyStatsData]);
 
   // Compute manifests list when a chart element is clicked
   const filteredManifestsForDetail = useMemo(() => {
@@ -261,6 +576,9 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
     const { type, value } = activeDetailFilter;
     
     return processedData.filter(m => {
+      if (type === 'month') {
+        return m.date ? m.date.startsWith(value) : false;
+      }
       if (type === 'date') {
         return m.date === value;
       }
@@ -515,27 +833,32 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
     return dataList.filter(item => item.value > 0);
   }, [processedData]);
 
-  // 5. Group Performance by Geographical Route/Destination for horizontal bar chart
+  // 5. Group Performance & Trips Count by Geographical Route/Destination
   const routePerformanceData = useMemo(() => {
-    const routeGroups: Record<string, { routeName: string; totalLoad: number; finishedDocs: number; totalDocs: number }> = {};
+    const routeGroups: Record<string, { routeName: string; countRoutes: number; totalLoad: number; finishedDocs: number; totalDocs: number; totalKm: number }> = {};
 
     processedData.forEach(m => {
       const rId = m.routeId || 'UNKNOWN';
-      const rName = routeMap[rId] || 'Sin asignar';
-      
-      if (!routeGroups[rId]) {
-        routeGroups[rId] = { routeName: rName, totalLoad: 0, finishedDocs: 0, totalDocs: 0 };
+      const rawRName = routeMap[rId] || 'Sin asignar';
+      const routeObj = routes.find(r => r.id === rId || r.name === rawRName);
+      const normName = routeObj?.group?.trim() || normalizeDestinationName(rawRName);
+
+      if (!routeGroups[normName]) {
+        routeGroups[normName] = { routeName: normName, countRoutes: 0, totalLoad: 0, finishedDocs: 0, totalDocs: 0, totalKm: 0 };
       }
 
+      routeGroups[normName].countRoutes++;
+      routeGroups[normName].totalKm += (m.kilometers || 0);
+
       const docs = m.documentsSnapshot || [];
-      routeGroups[rId].totalDocs += docs.length;
+      routeGroups[normName].totalDocs += docs.length;
 
       docs.forEach(d => {
         const amt = d.tipo === 'OC' ? 0 : (d.totalAmount ?? d.totalPendiente ?? 0);
-        routeGroups[rId].totalLoad += amt;
+        routeGroups[normName].totalLoad += amt;
 
         if (d.trackingStatus === 'ENTREGADO' || d.trackingStatus === 'RETIRADO') {
-          routeGroups[rId].finishedDocs++;
+          routeGroups[normName].finishedDocs++;
         }
       });
     });
@@ -545,26 +868,49 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
         const rate = item.totalDocs > 0 ? Math.round((item.finishedDocs / item.totalDocs) * 100) : 0;
         return {
           Ruta: item.routeName,
+          Viajes: item.countRoutes,
+          Documentos: item.totalDocs,
           'Carga Total ($)': item.totalLoad,
           'Carga (M$)': Math.round(item.totalLoad / 1000),
           'Efectividad (%)': rate,
-          Documentos: item.totalDocs
+          Km: item.totalKm
         };
       })
-      .sort((a,b) => b['Carga Total ($)'] - a['Carga Total ($)'])
-      .slice(0, 8); // Top 8 routes
-  }, [processedData, routeMap]);
+      .sort((a,b) => b.Viajes - a.Viajes || b['Carga Total ($)'] - a['Carga Total ($)']);
+  }, [processedData, routeMap, routes]);
 
-  // 6. Driver Efficiency Leaderboard
+  // 6. Driver Efficiency & Operation Breakdown Leaderboard
   const driverPerformanceData = useMemo(() => {
-    const driverGroups: Record<string, { driverName: string; countRoutes: number; totalDocs: number; deliveredDocs: number; totalKm: number; kmCount: number }> = {};
+    const driverGroups: Record<string, { 
+      driverName: string; 
+      countRoutes: number; 
+      totalDocs: number; 
+      deliveredDocs: number; 
+      totalKm: number; 
+      kmCount: number;
+      totalEntregas: number;
+      entregasExitosas: number;
+      totalRetiros: number;
+      retirosExitosos: number;
+    }> = {};
 
     processedData.forEach(m => {
       const dId = m.driverId || 'UNKNOWN';
       const dName = driverMap[dId] || 'Chofer no especificado';
 
       if (!driverGroups[dId]) {
-        driverGroups[dId] = { driverName: dName, countRoutes: 0, totalDocs: 0, deliveredDocs: 0, totalKm: 0, kmCount: 0 };
+        driverGroups[dId] = { 
+          driverName: dName, 
+          countRoutes: 0, 
+          totalDocs: 0, 
+          deliveredDocs: 0, 
+          totalKm: 0, 
+          kmCount: 0,
+          totalEntregas: 0,
+          entregasExitosas: 0,
+          totalRetiros: 0,
+          retirosExitosos: 0
+        };
       }
 
       driverGroups[dId].countRoutes++;
@@ -573,8 +919,20 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
       driverGroups[dId].totalDocs += docs.length;
 
       docs.forEach(d => {
-        if (d.trackingStatus === 'ENTREGADO' || d.trackingStatus === 'RETIRADO') {
-          driverGroups[dId].deliveredDocs++;
+        const isRetiro = d.proceso === 'RETIRO' || d.tipo === 'OC' || d.trackingStatus === 'RETIRADO' || d.trackingStatus === 'NO RETIRADO';
+
+        if (isRetiro) {
+          driverGroups[dId].totalRetiros++;
+          if (d.trackingStatus === 'RETIRADO' || d.trackingStatus === 'ENTREGADO' || d.trackingStatus === 'COMPLETO') {
+            driverGroups[dId].deliveredDocs++;
+            driverGroups[dId].retirosExitosos++;
+          }
+        } else {
+          driverGroups[dId].totalEntregas++;
+          if (d.trackingStatus === 'ENTREGADO' || d.trackingStatus === 'COMPLETO') {
+            driverGroups[dId].deliveredDocs++;
+            driverGroups[dId].entregasExitosas++;
+          }
         }
       });
 
@@ -588,16 +946,63 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
       .map(item => {
         const successRate = item.totalDocs > 0 ? Math.round((item.deliveredDocs / item.totalDocs) * 100) : 0;
         const avgKm = item.kmCount > 0 ? Math.round(item.totalKm / item.kmCount) : 0;
+        const pctEntregas = item.totalDocs > 0 ? Math.round((item.totalEntregas / item.totalDocs) * 100) : 0;
+        const pctRetiros = item.totalDocs > 0 ? Math.round((item.totalRetiros / item.totalDocs) * 100) : 0;
+        const efectividadEntregas = item.totalEntregas > 0 ? Math.round((item.entregasExitosas / item.totalEntregas) * 100) : 0;
+        const efectividadRetiros = item.totalRetiros > 0 ? Math.round((item.retirosExitosos / item.totalRetiros) * 100) : 0;
+
         return {
           Chofer: item.driverName,
           Rutas: item.countRoutes,
           Documentos: item.totalDocs,
           'Efectividad (%)': successRate,
-          'Km Promedio': avgKm
+          'Km Promedio': avgKm,
+          Entregas: item.totalEntregas,
+          'Entregas (%)': pctEntregas,
+          'Entregas Exitosas': item.entregasExitosas,
+          'Efectividad Entregas (%)': efectividadEntregas,
+          Retiros: item.totalRetiros,
+          'Retiros (%)': pctRetiros,
+          'Retiros Exitosos': item.retirosExitosos,
+          'Efectividad Retiros (%)': efectividadRetiros
         };
       })
       .sort((a,b) => b['Efectividad (%)'] - a['Efectividad (%)'] || b.Rutas - a.Rutas);
   }, [processedData, driverMap]);
+
+  // Total deliveries vs pickups aggregated across all drivers
+  const driverTeamTotals = useMemo(() => {
+    let totalDocs = 0;
+    let totalEntregas = 0;
+    let totalRetiros = 0;
+    let totalEntregasExitosas = 0;
+    let totalRetirosExitosos = 0;
+
+    driverPerformanceData.forEach(d => {
+      totalDocs += d.Documentos;
+      totalEntregas += d.Entregas;
+      totalRetiros += d.Retiros;
+      totalEntregasExitosas += d['Entregas Exitosas'];
+      totalRetirosExitosos += d['Retiros Exitosos'];
+    });
+
+    const pctEntregas = totalDocs > 0 ? Math.round((totalEntregas / totalDocs) * 100) : 0;
+    const pctRetiros = totalDocs > 0 ? Math.round((totalRetiros / totalDocs) * 100) : 0;
+    const efectividadEntregas = totalEntregas > 0 ? Math.round((totalEntregasExitosas / totalEntregas) * 100) : 0;
+    const efectividadRetiros = totalRetiros > 0 ? Math.round((totalRetirosExitosos / totalRetiros) * 100) : 0;
+
+    return {
+      totalDocs,
+      totalEntregas,
+      pctEntregas,
+      totalEntregasExitosas,
+      efectividadEntregas,
+      totalRetiros,
+      pctRetiros,
+      totalRetirosExitosos,
+      efectividadRetiros
+    };
+  }, [driverPerformanceData]);
 
   // 6b. Vehicle Efficiency & Productivity Data
   const vehiclePerformanceData = useMemo(() => {
@@ -671,8 +1076,38 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
         const avgTimeHrs = item.timeCount > 0 ? (item.totalTimeInMinutes / item.timeCount / 60) : 0;
         const valorPorViaje = item.countRoutes > 0 ? Math.round(item.totalValue / item.countRoutes) : 0;
 
+        // Calculate fuel cost and nominal performance for this vehicle
+        let fuelCost = 0;
+        const plateKey = item.vehicleName.split(' - ')[0]?.trim().toUpperCase() || item.vehicleName.trim().toUpperCase();
+        if (fuelCosts && Object.keys(fuelCosts).length > 0) {
+          if (selectedMonthFilter !== 'ALL') {
+            const [yr, mo] = selectedMonthFilter.split('-');
+            fuelCost = Number(fuelCosts[yr]?.[plateKey]?.[mo]) || 0;
+          } else {
+            Object.keys(fuelCosts).forEach(yr => {
+              const pCosts = fuelCosts[yr]?.[plateKey];
+              if (pCosts) {
+                Object.values(pCosts).forEach(c => {
+                  fuelCost += Number(c) || 0;
+                });
+              }
+            });
+          }
+        }
+
+        const vObj = vehicles.find(v => v.plate && v.plate.trim().toUpperCase() === plateKey);
+        const nominalKmL = vObj?.nominalKmPerLiter || 0;
+        const litrosTeoricos = nominalKmL > 0 ? (item.totalKm / nominalKmL) : 0;
+        const litrosRealesEst = fuelCost > 0 ? (fuelCost / 1050) : 0;
+        const rendimientoObservado = litrosRealesEst > 0 ? (item.totalKm / litrosRealesEst) : 0;
+        const desviacionPct = (nominalKmL > 0 && litrosTeoricos > 0 && litrosRealesEst > 0)
+          ? (((litrosRealesEst - litrosTeoricos) / litrosTeoricos) * 100)
+          : null;
+
         return {
           Vehiculo: item.vehicleName,
+          Plate: plateKey,
+          Model: vObj?.description || '',
           Rutas: item.countRoutes,
           Documentos: item.totalDocs,
           'Efectividad (%)': successRate,
@@ -682,11 +1117,102 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
           'Carga Total (M$)': Math.round(item.totalValue / 1000),
           'Carga Promedio (M$)': Math.round(valorPorViaje / 1000),
           'Horas Totales': totalHours,
-          'Horas Promedio': avgTimeHrs
+          'Horas Promedio': avgTimeHrs,
+          'Costo Combustible ($)': fuelCost,
+          'Rendimiento Nominal': nominalKmL,
+          'Litros Teoricos': litrosTeoricos,
+          'Litros Reales Est': litrosRealesEst,
+          'Rendimiento Observado': rendimientoObservado,
+          'Desviacion Pct': desviacionPct
         };
       })
       .sort((a,b) => b.Rutas - a.Rutas || b['Km Totales'] - a['Km Totales'] || b['Carga Total Valor ($)'] - a['Carga Total Valor ($)']);
-  }, [processedData, vehicleMap]);
+  }, [processedData, vehicleMap, fuelCosts, selectedMonthFilter, vehicles]);
+
+  // Handler functions for sorting table columns
+  const handleSortDriver = (field: string) => {
+    if (driverSortField === field) {
+      setDriverSortDir(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setDriverSortField(field);
+      setDriverSortDir('desc');
+    }
+  };
+
+  const handleSortVehicle = (field: string) => {
+    if (vehicleSortField === field) {
+      setVehicleSortDir(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setVehicleSortField(field as any);
+      setVehicleSortDir('desc');
+    }
+  };
+
+  const handleSortFleetFuel = (field: string) => {
+    if (fleetFuelSortField === field) {
+      setFleetFuelSortDir(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setFleetFuelSortField(field as any);
+      setFleetFuelSortDir('desc');
+    }
+  };
+
+  const handleSortRoute = (field: 'Ruta' | 'Viajes' | 'Documentos' | 'Carga Total ($)' | 'Efectividad (%)') => {
+    if (routeSortField === field) {
+      setRouteSortDir(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setRouteSortField(field);
+      setRouteSortDir('desc');
+    }
+  };
+
+  const sortedRoutePerformanceData = useMemo(() => {
+    return [...routePerformanceData].sort((a, b) => {
+      let valA: any = a[routeSortField as keyof typeof a];
+      let valB: any = b[routeSortField as keyof typeof b];
+      if (valA === null || valA === undefined) valA = -999999;
+      if (valB === null || valB === undefined) valB = -999999;
+      if (typeof valA === 'string') {
+        return routeSortDir === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+      }
+      return routeSortDir === 'asc' ? (valA - valB) : (valB - valA);
+    });
+  }, [routePerformanceData, routeSortField, routeSortDir]);
+
+  const sortedDriverPerformanceData = useMemo(() => {
+    return [...driverPerformanceData].sort((a, b) => {
+      let valA: any = a[driverSortField as keyof typeof a];
+      let valB: any = b[driverSortField as keyof typeof b];
+      if (typeof valA === 'string') {
+        return driverSortDir === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+      }
+      return driverSortDir === 'asc' ? ((valA || 0) - (valB || 0)) : ((valB || 0) - (valA || 0));
+    });
+  }, [driverPerformanceData, driverSortField, driverSortDir]);
+
+  const sortedVehiclePerformanceData = useMemo(() => {
+    return [...vehiclePerformanceData].sort((a, b) => {
+      let valA: any = a[vehicleSortField as keyof typeof a];
+      let valB: any = b[vehicleSortField as keyof typeof b];
+      if (typeof valA === 'string') {
+        return vehicleSortDir === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+      }
+      return vehicleSortDir === 'asc' ? ((valA || 0) - (valB || 0)) : ((valB || 0) - (valA || 0));
+    });
+  }, [vehiclePerformanceData, vehicleSortField, vehicleSortDir]);
+
+  const sortedFleetFuelPerformanceData = useMemo(() => {
+    return [...vehiclePerformanceData].sort((a, b) => {
+      let valA: any = a[fleetFuelSortField as keyof typeof a];
+      let valB: any = b[fleetFuelSortField as keyof typeof b];
+      if (valA === null || valA === undefined) valA = -999999;
+      if (valB === null || valB === undefined) valB = -999999;
+      if (typeof valA === 'string') {
+        return fleetFuelSortDir === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+      }
+      return fleetFuelSortDir === 'asc' ? (valA - valB) : (valB - valA);
+    });
+  }, [vehiclePerformanceData, fleetFuelSortField, fleetFuelSortDir]);
 
   // Helper function to calculate OTIF/Efectividad for a specific manifest
   const calculateManifestOTIF = (manifest: LogisticsManifest) => {
@@ -756,7 +1282,25 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
         </div>
 
         {/* Filters Panel */}
-        <div className={`grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 bg-slate-50/50 p-4 rounded-2xl border border-slate-100 ${filtersCollapsed ? 'hidden md:grid' : 'grid'}`}>
+        <div className={`grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3 bg-slate-50/50 p-4 rounded-2xl border border-slate-100 ${filtersCollapsed ? 'hidden md:grid' : 'grid'}`}>
+          {/* Month filter */}
+          <div className="flex flex-col gap-1 text-left">
+            <span className="text-[9px] font-extrabold uppercase text-slate-400 tracking-wider">Filtrar por Mes</span>
+            <div className="relative">
+              <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-3.5 h-3.5" />
+              <select 
+                value={selectedMonthFilter}
+                onChange={(e) => setSelectedMonthFilter(e.target.value)}
+                className="w-full bg-white border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-600/15 focus:border-indigo-600 rounded-xl pl-9 pr-4 py-2 text-xs font-bold text-slate-800 transition-all cursor-pointer"
+              >
+                <option value="ALL">Todos los Meses</option>
+                {availableMonthFilters.map(ym => (
+                  <option key={ym} value={ym}>{formatMonthKey(ym)}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
           {/* Driver filter */}
           <div className="flex flex-col gap-1 text-left">
             <span className="text-[9px] font-extrabold uppercase text-slate-400 tracking-wider">Filtrar por Chofer</span>
@@ -854,7 +1398,7 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
             {/* 1. Core KPIs Metric Cards (Logistics Engineer Perspective) */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               
-              {/* Deliveries Success Rate (OTIF Index equivalent) */}
+              {/* Card 1: Deliveries Success Rate (OTIF Index) */}
               <div 
                 onClick={() => {
                   setServiceLevelTab('FAILED');
@@ -865,7 +1409,16 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
               >
                 <div className="flex items-center justify-between">
                   <div>
-                    <span className="text-[10px] font-extrabold uppercase text-slate-400 tracking-widest block mb-0.5">Nivel de Servicio</span>
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <span className="text-[10px] font-extrabold uppercase text-slate-400 tracking-widest">Nivel de Servicio (OTIF)</span>
+                      {latestMoM && latestMoM.otifMoM !== null && (
+                        <span className={`px-1.5 py-0.5 rounded text-[9px] font-black font-mono flex items-center ${
+                          latestMoM.otifMoM >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
+                        }`}>
+                          {latestMoM.otifMoM >= 0 ? `+${latestMoM.otifMoM}% MoM` : `${latestMoM.otifMoM}% MoM`}
+                        </span>
+                      )}
+                    </div>
                     <h4 className="text-2xl font-black text-slate-900 group-hover:text-indigo-600 transition-colors leading-none">{metrics.successRate}%</h4>
                   </div>
                   <div className={`p-3 rounded-xl ${metrics.successRate >= 90 ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'} group-hover:scale-110 transition-transform`}>
@@ -881,11 +1434,20 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
                 </div>
               </div>
 
-              {/* Managed Financial Volume */}
+              {/* Card 2: Managed Financial Volume */}
               <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between group">
                 <div className="flex items-center justify-between">
                   <div>
-                    <span className="text-[10px] font-extrabold uppercase text-slate-400 tracking-widest block mb-0.5">Carga Valorizada</span>
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <span className="text-[10px] font-extrabold uppercase text-slate-400 tracking-widest">Carga Valorizada</span>
+                      {latestMoM && latestMoM.valueMoM !== null && (
+                        <span className={`px-1.5 py-0.5 rounded text-[9px] font-black font-mono flex items-center ${
+                          latestMoM.valueMoM >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
+                        }`}>
+                          {latestMoM.valueMoM >= 0 ? `+${latestMoM.valueMoM}% MoM` : `${latestMoM.valueMoM}% MoM`}
+                        </span>
+                      )}
+                    </div>
                     <h4 className="text-2xl font-black text-indigo-600 leading-none">{formatCLP(metrics.totalValue)}</h4>
                   </div>
                   <div className="p-3 bg-indigo-50 text-indigo-600 rounded-xl group-hover:scale-110 transition-transform">
@@ -900,30 +1462,50 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
                 </div>
               </div>
 
-              {/* Total Mileage & Mileage Efficiency */}
+              {/* Card 3: Fleet Monetization ($/Km) & Distance */}
               <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between group">
                 <div className="flex items-center justify-between">
                   <div>
-                    <span className="text-[10px] font-extrabold uppercase text-slate-400 tracking-widest block mb-0.5">Distancia Recorrida</span>
-                    <h4 className="text-2xl font-black text-slate-900 leading-none">{metrics.totalKilometers.toLocaleString('es-CL')} Km</h4>
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <span className="text-[10px] font-extrabold uppercase text-slate-400 tracking-widest">Densidad ($ / Km)</span>
+                      {latestMoM && latestMoM.valPerKmMoM !== null && (
+                        <span className={`px-1.5 py-0.5 rounded text-[9px] font-black font-mono flex items-center ${
+                          latestMoM.valPerKmMoM >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
+                        }`}>
+                          {latestMoM.valPerKmMoM >= 0 ? `+${latestMoM.valPerKmMoM}% MoM` : `${latestMoM.valPerKmMoM}% MoM`}
+                        </span>
+                      )}
+                    </div>
+                    <h4 className="text-2xl font-black text-slate-900 leading-none">
+                      {metrics.valuePerKm > 0 ? formatCLP(metrics.valuePerKm) : `${metrics.totalKilometers.toLocaleString('es-CL')} Km`}
+                    </h4>
                   </div>
                   <div className="p-3 bg-slate-50 border border-slate-200 text-slate-700 rounded-xl group-hover:scale-110 transition-transform">
                     <Milestone className="w-5 h-5" />
                   </div>
                 </div>
                 <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-[10px] font-bold">
-                  <span className="text-slate-400 uppercase tracking-wider">Promedio por Ruta</span>
-                  <span className="text-slate-800 font-mono bg-slate-100 px-2 py-0.5 rounded-lg">{metrics.avgKmPerRoute} Km</span>
+                  <span className="text-slate-400 uppercase tracking-wider">Km Totales ({metrics.avgKmPerRoute} km/ruta)</span>
+                  <span className="text-slate-800 font-mono bg-slate-100 px-2 py-0.5 rounded-lg">{metrics.totalKilometers.toLocaleString('es-CL')} Km</span>
                 </div>
               </div>
 
-              {/* Duration / Operational Tempo */}
+              {/* Card 4: Operational Tempo & Density */}
               <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between group">
                 <div className="flex items-center justify-between">
                   <div>
-                    <span className="text-[10px] font-extrabold uppercase text-slate-400 tracking-widest block mb-0.5">Tiempo de Operación</span>
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <span className="text-[10px] font-extrabold uppercase text-slate-400 tracking-widest">Densidad Despacho</span>
+                      {latestMoM && latestMoM.routesMoM !== null && (
+                        <span className={`px-1.5 py-0.5 rounded text-[9px] font-black font-mono flex items-center ${
+                          latestMoM.routesMoM >= 0 ? 'bg-indigo-50 text-indigo-700' : 'bg-amber-50 text-amber-700'
+                        }`}>
+                          {latestMoM.routesMoM >= 0 ? `+${latestMoM.routesMoM}% MoM` : `${latestMoM.routesMoM}% MoM`}
+                        </span>
+                      )}
+                    </div>
                     <h4 className="text-2xl font-black text-slate-900 leading-none">
-                      {metrics.avgDurationHours > 0 ? `${metrics.avgDurationHours.toFixed(1)} hrs` : 'N/D'}
+                      {metrics.avgDocsPerRoute} <span className="text-xs font-bold text-slate-500">doc/ruta</span>
                     </h4>
                   </div>
                   <div className="p-3 bg-sky-50 text-sky-600 rounded-xl group-hover:scale-110 transition-transform">
@@ -931,10 +1513,356 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
                   </div>
                 </div>
                 <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-[10px] font-bold">
-                  <span className="text-slate-400 uppercase tracking-wider">Rutas Completas</span>
-                  <span className="text-slate-800 bg-slate-100 px-2 py-0.5 rounded-lg">{metrics.totalRoutes} Planificadas</span>
+                  <span className="text-slate-400 uppercase tracking-wider">Total Rutas ({metrics.avgDurationHours > 0 ? `${metrics.avgDurationHours.toFixed(1)}h/ruta` : 'S/H'})</span>
+                  <span className="text-slate-800 bg-slate-100 px-2 py-0.5 rounded-lg font-mono">{metrics.totalRoutes} HR</span>
                 </div>
               </div>
+
+            </div>
+
+            {/* 1.B Monthly Comparative & Historical Trend Section */}
+            <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm flex flex-col gap-6" id="monthly-comparison-section">
+              {/* Section Header */}
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+                <div className="text-left">
+                  <div className="flex items-center gap-2">
+                    <span className="p-2 bg-indigo-50 text-indigo-600 rounded-xl">
+                      <BarChart2 className="w-5 h-5" />
+                    </span>
+                    <div>
+                      <h3 className="text-base font-black text-slate-900 uppercase tracking-tight flex items-center gap-2">
+                        Análisis Comparativo Mensual (Evolución Histórica & Variaciones MoM)
+                      </h3>
+                      <p className="text-xs text-slate-500 font-medium">
+                        Comparativa intermensual de volumen de carga (M$), efectividad OTIF, volumen de rutas y rendimiento monetario por kilómetro.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Range Controls & View Mode Toggle */}
+                <div className="flex flex-wrap items-center gap-3">
+                  {/* Time Range Selector */}
+                  <div className="flex bg-slate-100 p-1 rounded-xl">
+                    <button
+                      onClick={() => setSelectedMonthRange('ALL')}
+                      className={`px-3 py-1.5 text-[10px] font-black rounded-lg transition-all cursor-pointer ${
+                        selectedMonthRange === 'ALL' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'
+                      }`}
+                    >
+                      Histórico ({monthlyStatsData.length} Meses)
+                    </button>
+                    <button
+                      onClick={() => setSelectedMonthRange('LAST_3')}
+                      className={`px-3 py-1.5 text-[10px] font-black rounded-lg transition-all cursor-pointer ${
+                        selectedMonthRange === 'LAST_3' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'
+                      }`}
+                    >
+                      Últimos 3 Meses
+                    </button>
+                    <button
+                      onClick={() => setSelectedMonthRange('LAST_6')}
+                      className={`px-3 py-1.5 text-[10px] font-black rounded-lg transition-all cursor-pointer ${
+                        selectedMonthRange === 'LAST_6' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'
+                      }`}
+                    >
+                      Últimos 6 Meses
+                    </button>
+                    <button
+                      onClick={() => setSelectedMonthRange('THIS_YEAR')}
+                      className={`px-3 py-1.5 text-[10px] font-black rounded-lg transition-all cursor-pointer ${
+                        selectedMonthRange === 'THIS_YEAR' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'
+                      }`}
+                    >
+                      Año Actual
+                    </button>
+                  </div>
+
+                  {/* Mode View Switcher (Charts vs Detailed Table) */}
+                  <div className="flex bg-slate-100 p-1 rounded-xl">
+                    <button
+                      onClick={() => setMonthlyTab('CHARTS')}
+                      className={`px-3 py-1.5 text-[10px] font-black rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${
+                        monthlyTab === 'CHARTS' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-800'
+                      }`}
+                    >
+                      <Activity className="w-3.5 h-3.5" />
+                      Gráficos
+                    </button>
+                    <button
+                      onClick={() => setMonthlyTab('TABLE')}
+                      className={`px-3 py-1.5 text-[10px] font-black rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${
+                        monthlyTab === 'TABLE' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-800'
+                      }`}
+                    >
+                      <FileText className="w-3.5 h-3.5" />
+                      Tabla Comparativa
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Headline MoM Summary Highlights if latestMoM is available */}
+              {latestMoM && latestMoM.prevMonthLabel && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 bg-slate-50/80 p-4 rounded-2xl border border-slate-100">
+                  
+                  {/* MoM Card 1: Carga Valorizada */}
+                  <div className="bg-white p-3.5 rounded-xl border border-slate-200/80 shadow-2xs flex flex-col justify-between">
+                    <div className="flex items-center justify-between text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mb-1">
+                      <span>Carga Despachada (MoM)</span>
+                      <span className="text-slate-500 font-mono text-[9px]">{latestMoM.monthLabel} vs {latestMoM.prevMonthLabel}</span>
+                    </div>
+                    <div className="flex items-baseline justify-between mt-1">
+                      <span className="text-base font-black text-slate-900 font-mono">{formatCLP(latestMoM.totalValue)}</span>
+                      {latestMoM.valueMoM !== null && (
+                        <span className={`inline-flex items-center gap-0.5 px-2 py-0.5 rounded-lg text-[11px] font-black font-mono ${
+                          latestMoM.valueMoM >= 0 ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-rose-50 text-rose-700 border border-rose-100'
+                        }`}>
+                          {latestMoM.valueMoM >= 0 ? <ArrowUpRight className="w-3.5 h-3.5" /> : <ArrowDownRight className="w-3.5 h-3.5" />}
+                          {latestMoM.valueMoM >= 0 ? `+${latestMoM.valueMoM}%` : `${latestMoM.valueMoM}%`}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* MoM Card 2: Nivel de Servicio OTIF */}
+                  <div className="bg-white p-3.5 rounded-xl border border-slate-200/80 shadow-2xs flex flex-col justify-between">
+                    <div className="flex items-center justify-between text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mb-1">
+                      <span>Tasa OTIF (MoM)</span>
+                      <span className="text-slate-500 font-mono text-[9px]">{latestMoM.monthLabel} vs {latestMoM.prevMonthLabel}</span>
+                    </div>
+                    <div className="flex items-baseline justify-between mt-1">
+                      <span className="text-base font-black text-slate-900 font-mono">{latestMoM.otifRate}%</span>
+                      {latestMoM.otifMoM !== null && (
+                        <span className={`inline-flex items-center gap-0.5 px-2 py-0.5 rounded-lg text-[11px] font-black font-mono ${
+                          latestMoM.otifMoM >= 0 ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-rose-50 text-rose-700 border border-rose-100'
+                        }`}>
+                          {latestMoM.otifMoM >= 0 ? <ArrowUpRight className="w-3.5 h-3.5" /> : <ArrowDownRight className="w-3.5 h-3.5" />}
+                          {latestMoM.otifMoM >= 0 ? `+${latestMoM.otifMoM} pts` : `${latestMoM.otifMoM} pts`}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* MoM Card 3: Hojas de Ruta Finalizadas */}
+                  <div className="bg-white p-3.5 rounded-xl border border-slate-200/80 shadow-2xs flex flex-col justify-between">
+                    <div className="flex items-center justify-between text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mb-1">
+                      <span>Volumen Rutas (MoM)</span>
+                      <span className="text-slate-500 font-mono text-[9px]">{latestMoM.monthLabel} vs {latestMoM.prevMonthLabel}</span>
+                    </div>
+                    <div className="flex items-baseline justify-between mt-1">
+                      <span className="text-base font-black text-slate-900 font-mono">{latestMoM.totalRoutes} HR</span>
+                      {latestMoM.routesMoM !== null && (
+                        <span className={`inline-flex items-center gap-0.5 px-2 py-0.5 rounded-lg text-[11px] font-black font-mono ${
+                          latestMoM.routesMoM >= 0 ? 'bg-indigo-50 text-indigo-700 border border-indigo-100' : 'bg-amber-50 text-amber-700 border border-amber-100'
+                        }`}>
+                          {latestMoM.routesMoM >= 0 ? <ArrowUpRight className="w-3.5 h-3.5" /> : <ArrowDownRight className="w-3.5 h-3.5" />}
+                          {latestMoM.routesMoM >= 0 ? `+${latestMoM.routesMoM}%` : `${latestMoM.routesMoM}%`}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* MoM Card 4: Rendimiento ($/Km) */}
+                  <div className="bg-white p-3.5 rounded-xl border border-slate-200/80 shadow-2xs flex flex-col justify-between">
+                    <div className="flex items-center justify-between text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mb-1">
+                      <span>Densidad Monetaria ($/Km)</span>
+                      <span className="text-slate-500 font-mono text-[9px]">{latestMoM.monthLabel} vs {latestMoM.prevMonthLabel}</span>
+                    </div>
+                    <div className="flex items-baseline justify-between mt-1">
+                      <span className="text-base font-black text-slate-900 font-mono">{formatCLP(latestMoM.valuePerKm)}/km</span>
+                      {latestMoM.valPerKmMoM !== null && (
+                        <span className={`inline-flex items-center gap-0.5 px-2 py-0.5 rounded-lg text-[11px] font-black font-mono ${
+                          latestMoM.valPerKmMoM >= 0 ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-rose-50 text-rose-700 border border-rose-100'
+                        }`}>
+                          {latestMoM.valPerKmMoM >= 0 ? <ArrowUpRight className="w-3.5 h-3.5" /> : <ArrowDownRight className="w-3.5 h-3.5" />}
+                          {latestMoM.valPerKmMoM >= 0 ? `+${latestMoM.valPerKmMoM}%` : `${latestMoM.valPerKmMoM}%`}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                </div>
+              )}
+
+              {/* Monthly Visual Charts vs Comparative Table */}
+              {monthlyTab === 'CHARTS' ? (
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  
+                  {/* Monthly Chart 1: Evolución Carga (M$) vs OTIF (%) */}
+                  <div className="bg-slate-50/50 border border-slate-100 rounded-2xl p-5 shadow-2xs flex flex-col justify-between h-[360px] lg:col-span-2">
+                    <div className="mb-3 text-left flex items-center justify-between">
+                      <div>
+                        <span className="text-[9px] font-extrabold uppercase text-indigo-600 tracking-wider block">Evolución Intermensual</span>
+                        <h4 className="text-xs font-black text-slate-800 uppercase tracking-tight">Carga Total Despachada (M$) vs Nivel de Servicio OTIF (%)</h4>
+                      </div>
+                      <span className="text-[10px] font-bold text-slate-400 font-mono">
+                        {filteredMonthlyStats.length} {filteredMonthlyStats.length === 1 ? 'Mes' : 'Meses'}
+                      </span>
+                    </div>
+
+                    {filteredMonthlyStats.length === 0 ? (
+                      <div className="flex-1 flex items-center justify-center text-slate-400 text-xs italic">
+                        Sin datos mensuales para mostrar
+                      </div>
+                    ) : (
+                      <div className="flex-1 h-full w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <ComposedChart data={filteredMonthlyStats} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                            <XAxis 
+                              dataKey="shortMonthLabel" 
+                              tickLine={false} 
+                              axisLine={false} 
+                              tick={{ fill: '#475569', fontSize: 10, fontWeight: 'bold' }} 
+                            />
+                            <YAxis yAxisId="left" tickLine={false} axisLine={false} tick={{ fontSize: 9 }} unit="k" />
+                            <YAxis yAxisId="right" orientation="right" tickLine={false} axisLine={false} tick={{ fontSize: 9, fill: '#10b981' }} domain={[0, 100]} unit="%" />
+                            <Tooltip 
+                              contentStyle={{ backgroundColor: '#0f172a', border: 'none', borderRadius: '12px', color: '#fff', fontSize: '11px', fontWeight: 'bold' }}
+                              formatter={(val, name) => {
+                                if (name === 'Carga (M$)') return [`$${(Number(val) * 1000).toLocaleString('es-CL')}`, 'Carga Total'];
+                                if (name === 'OTIF (%)') return [`${val}%`, 'Nivel de Servicio'];
+                                return [val, name];
+                              }}
+                            />
+                            <Legend verticalAlign="top" height={30} iconType="circle" wrapperStyle={{ fontSize: '10px', fontWeight: 'bold', color: '#475569' }} />
+                            <Bar yAxisId="left" name="Carga (M$)" dataKey="totalValueM" fill="#6366f1" radius={[6, 6, 0, 0]} maxBarSize={35} cursor="pointer" onClick={(e) => {
+                              if (e?.yearMonth) setActiveDetailFilter({ type: 'month', value: e.yearMonth, title: `Hojas de Ruta de ${e.monthLabel}` });
+                            }} />
+                            <Line yAxisId="right" type="monotone" name="OTIF (%)" dataKey="otifRate" stroke="#10b981" strokeWidth={3} dot={{ fill: '#10b981', r: 4 }} activeDot={{ r: 6 }} cursor="pointer" onClick={(e) => {
+                              if (e?.yearMonth) setActiveDetailFilter({ type: 'month', value: e.yearMonth, title: `Hojas de Ruta de ${e.monthLabel}` });
+                            }} />
+                          </ComposedChart>
+                        </ResponsiveContainer>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Monthly Chart 2: Volume Comparison (Routes vs Delivered vs Failed) */}
+                  <div className="bg-slate-50/50 border border-slate-100 rounded-2xl p-5 shadow-2xs flex flex-col justify-between h-[360px]">
+                    <div className="mb-3 text-left">
+                      <span className="text-[9px] font-extrabold uppercase text-emerald-600 tracking-wider block">Volumen Operacional</span>
+                      <h4 className="text-xs font-black text-slate-800 uppercase tracking-tight">Puntos Retirados, Entregas y Rechazos por Mes</h4>
+                    </div>
+
+                    {filteredMonthlyStats.length === 0 ? (
+                      <div className="flex-1 flex items-center justify-center text-slate-400 text-xs italic">
+                        Sin registros
+                      </div>
+                    ) : (
+                      <div className="flex-1 h-full w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart data={filteredMonthlyStats} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                            <XAxis dataKey="shortMonthLabel" tickLine={false} axisLine={false} tick={{ fill: '#475569', fontSize: 9, fontWeight: 'bold' }} />
+                            <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 9 }} />
+                            <Tooltip contentStyle={{ backgroundColor: '#0f172a', border: 'none', borderRadius: '12px', color: '#fff', fontSize: '11px', fontWeight: 'bold' }} />
+                            <Legend verticalAlign="top" height={30} iconType="circle" wrapperStyle={{ fontSize: '10px', fontWeight: 'bold', color: '#475569' }} />
+                            <Bar name="Puntos Retirados" dataKey="retiradosDocs" fill="#818cf8" radius={[4, 4, 0, 0]} maxBarSize={18} />
+                            <Bar name="Entregados" dataKey="deliveredDocs" fill="#10b981" radius={[4, 4, 0, 0]} maxBarSize={18} />
+                            <Bar name="Rechazados" dataKey="failedDocs" fill="#f43f5e" radius={[4, 4, 0, 0]} maxBarSize={18} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    )}
+                  </div>
+
+                </div>
+              ) : (
+                /* Monthly Comparison Detailed Table View */
+                <div className="border border-slate-100 rounded-2xl overflow-hidden shadow-2xs bg-white overflow-x-auto">
+                  <table className="w-full text-left text-xs border-collapse min-w-[950px]">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-200 text-[9px] font-extrabold text-slate-400 uppercase tracking-widest">
+                        <th className="px-4 py-3">Mes / Periodo</th>
+                        <th className="px-3 py-3 text-center">Hojas Ruta</th>
+                        <th className="px-3 py-3 text-center">Doc. Totales</th>
+                        <th className="px-3 py-3 text-center">Entregados</th>
+                        <th className="px-3 py-3 text-center">Rechazados</th>
+                        <th className="px-3 py-3 text-center">% OTIF</th>
+                        <th className="px-4 py-3 text-right">Carga Total ($)</th>
+                        <th className="px-3 py-3 text-right">Carga / Ruta</th>
+                        <th className="px-3 py-3 text-center">Km Recorridos</th>
+                        <th className="px-3 py-3 text-right">Rendimiento ($/Km)</th>
+                        <th className="px-3 py-3 text-center">Var. Carga MoM</th>
+                        <th className="px-3 py-3 text-center">Var. OTIF MoM</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {filteredMonthlyStats.map((row) => {
+                        return (
+                          <tr 
+                            key={row.yearMonth}
+                            onClick={() => {
+                              setActiveDetailFilter({
+                                type: 'month',
+                                value: row.yearMonth,
+                                title: `Hojas de Ruta de ${row.monthLabel}`
+                              });
+                            }}
+                            className="hover:bg-indigo-50/40 cursor-pointer transition-colors"
+                          >
+                            <td className="px-4 py-3 font-extrabold text-slate-800 flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full bg-indigo-500" />
+                              {row.monthLabel}
+                            </td>
+                            <td className="px-3 py-3 text-center font-bold text-slate-700 font-mono">
+                              {row.totalRoutes}
+                            </td>
+                            <td className="px-3 py-3 text-center font-bold text-slate-600 font-mono">
+                              {row.totalDocuments}
+                            </td>
+                            <td className="px-3 py-3 text-center font-bold text-emerald-600 font-mono">
+                              {row.deliveredDocs}
+                            </td>
+                            <td className="px-3 py-3 text-center font-bold text-rose-600 font-mono">
+                              {row.failedDocs}
+                            </td>
+                            <td className="px-3 py-3 text-center">
+                              <span className={`inline-block font-mono font-extrabold px-2 py-0.5 rounded-lg text-[10px] ${
+                                row.otifRate >= 90 ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-amber-50 text-amber-700 border border-amber-100'
+                              }`}>
+                                {row.otifRate}%
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-right font-black font-mono text-slate-800">
+                              {formatCLP(row.totalValue)}
+                            </td>
+                            <td className="px-3 py-3 text-right font-mono font-semibold text-slate-600 text-[11px]">
+                              {formatCLP(row.avgValPerRoute)}
+                            </td>
+                            <td className="px-3 py-3 text-center font-mono font-semibold text-slate-500">
+                              {row.totalKm.toLocaleString('es-CL')} km
+                            </td>
+                            <td className="px-3 py-3 text-right font-mono font-bold text-indigo-600">
+                              {formatCLP(row.valuePerKm)}/km
+                            </td>
+                            <td className="px-3 py-3 text-center">
+                              {row.valueMoM !== null ? (
+                                <span className={`inline-flex items-center gap-0.5 text-[10px] font-black font-mono px-1.5 py-0.5 rounded ${
+                                  row.valueMoM >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
+                                }`}>
+                                  {row.valueMoM >= 0 ? `+${row.valueMoM}%` : `${row.valueMoM}%`}
+                                </span>
+                              ) : <span className="text-slate-300">—</span>}
+                            </td>
+                            <td className="px-3 py-3 text-center">
+                              {row.otifMoM !== null ? (
+                                <span className={`inline-flex items-center gap-0.5 text-[10px] font-black font-mono px-1.5 py-0.5 rounded ${
+                                  row.otifMoM >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
+                                }`}>
+                                  {row.otifMoM >= 0 ? `+${row.otifMoM} pts` : `${row.otifMoM} pts`}
+                                </span>
+                              ) : <span className="text-slate-300">—</span>}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
 
             </div>
 
@@ -1147,29 +2075,140 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
             {/* 3. Bottom Grid: Geographical efficiency and Driver statistics */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               
-              {/* Route Performers (Horizontal Bar Chart) */}
+              {/* Route Performers (Cantidad de Viajes y Rendimiento por Destino) */}
               <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm flex flex-col h-[400px]">
-                <div className="mb-4 text-left">
-                  <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-                    <Navigation className="w-4 h-4 text-indigo-600" /> Rendimiento y Eficacia por Destino / Ruta
-                  </h3>
-                  <p className="text-[10px] text-slate-400 font-medium">Volumen financiero despachado (M$) y tasa de éxito por ruta geográfica principal.</p>
+                <div className="mb-4 text-left flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                      <Navigation className="w-4 h-4 text-indigo-600" /> Cantidad de Viajes por Destino / Ruta
+                    </h3>
+                    <p className="text-[10px] text-slate-400 font-medium font-sans">Frecuencia de viajes (HR), entregas e importe despachado por destino o agrupador de ruta.</p>
+                  </div>
+
+                  {/* View mode toggle */}
+                  <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl shrink-0 self-start sm:self-auto">
+                    <button
+                      onClick={() => setRouteViewMode('TABLE')}
+                      className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold flex items-center gap-1 transition-all cursor-pointer ${
+                        routeViewMode === 'TABLE' 
+                          ? 'bg-white text-indigo-600 shadow-sm' 
+                          : 'text-slate-500 hover:text-slate-800'
+                      }`}
+                    >
+                      <Table className="w-3.5 h-3.5" />
+                      <span>Tabla de Viajes</span>
+                    </button>
+                    <button
+                      onClick={() => setRouteViewMode('CHART')}
+                      className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold flex items-center gap-1 transition-all cursor-pointer ${
+                        routeViewMode === 'CHART' 
+                          ? 'bg-white text-indigo-600 shadow-sm' 
+                          : 'text-slate-500 hover:text-slate-800'
+                      }`}
+                    >
+                      <BarChart2 className="w-3.5 h-3.5" />
+                      <span>Gráfico</span>
+                    </button>
+                  </div>
                 </div>
 
-                {routePerformanceData.length === 0 ? (
+                {sortedRoutePerformanceData.length === 0 ? (
                   <div className="flex-1 flex items-center justify-center text-slate-400 text-xs italic">
-                    Sin rutas asignadas
+                    Sin rutas o destinos asignados
+                  </div>
+                ) : routeViewMode === 'TABLE' ? (
+                  <div className="flex-1 overflow-auto border border-slate-100 rounded-2xl">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead className="bg-slate-50 sticky top-0 border-b border-slate-100 select-none">
+                        <tr className="text-[9px] font-extrabold text-slate-400 uppercase tracking-widest">
+                          <th className="px-4 py-3 cursor-pointer hover:text-indigo-600 transition-colors" onClick={() => handleSortRoute('Ruta')}>
+                            <div className="flex items-center gap-1">
+                              <span>Destino / Ruta</span>
+                              <ArrowUpDown className="w-2.5 h-2.5 opacity-60" />
+                            </div>
+                          </th>
+                          <th className="px-3 py-3 text-center cursor-pointer hover:text-indigo-600 transition-colors" onClick={() => handleSortRoute('Viajes')}>
+                            <div className="flex items-center justify-center gap-1">
+                              <span>Cant. Viajes</span>
+                              <ArrowUpDown className="w-2.5 h-2.5 opacity-60" />
+                            </div>
+                          </th>
+                          <th className="px-3 py-3 text-center cursor-pointer hover:text-indigo-600 transition-colors" onClick={() => handleSortRoute('Documentos')}>
+                            <div className="flex items-center justify-center gap-1">
+                              <span>Docs / Pts</span>
+                              <ArrowUpDown className="w-2.5 h-2.5 opacity-60" />
+                            </div>
+                          </th>
+                          <th className="px-3 py-3 text-right cursor-pointer hover:text-indigo-600 transition-colors" onClick={() => handleSortRoute('Carga Total ($)')}>
+                            <div className="flex items-center justify-end gap-1">
+                              <span>Carga Total ($)</span>
+                              <ArrowUpDown className="w-2.5 h-2.5 opacity-60" />
+                            </div>
+                          </th>
+                          <th className="px-4 py-3 text-right cursor-pointer hover:text-indigo-600 transition-colors" onClick={() => handleSortRoute('Efectividad (%)')}>
+                            <div className="flex items-center justify-end gap-1">
+                              <span>Efectividad</span>
+                              <ArrowUpDown className="w-2.5 h-2.5 opacity-60" />
+                            </div>
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {sortedRoutePerformanceData.map((r, idx) => (
+                          <tr 
+                            key={idx} 
+                            onClick={() => {
+                              setActiveDetailFilter({
+                                type: 'route',
+                                value: r.Ruta,
+                                title: `Hojas de Ruta - Destino: ${r.Ruta}`
+                              });
+                            }}
+                            className="hover:bg-indigo-50/40 cursor-pointer transition-colors"
+                          >
+                            <td className="px-4 py-2.5 flex items-center gap-2">
+                              <span className="w-5 h-5 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center text-[10px] font-bold font-mono">
+                                {idx + 1}
+                              </span>
+                              <span className="font-bold text-slate-800 truncate max-w-[130px]" title={r.Ruta}>{r.Ruta}</span>
+                            </td>
+                            <td className="px-3 py-2.5 text-center">
+                              <span className="inline-block px-2.5 py-0.5 rounded-lg bg-indigo-50 text-indigo-700 font-black font-mono text-[11px] border border-indigo-200/60 shadow-2xs">
+                                {r.Viajes} {r.Viajes === 1 ? 'viaje' : 'viajes'}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2.5 text-center font-bold text-slate-600 font-mono">
+                              {r.Documentos}
+                            </td>
+                            <td className="px-3 py-2.5 text-right font-mono font-bold text-slate-800">
+                              {formatCLP(r['Carga Total ($)'])}
+                            </td>
+                            <td className="px-4 py-2.5 text-right">
+                              <div className="flex items-center justify-end gap-1.5">
+                                <span className="font-mono font-black text-slate-900">{r['Efectividad (%)']}%</span>
+                                <div className="w-8 bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                                  <div 
+                                    className={`h-full rounded-full ${r['Efectividad (%)'] >= 90 ? 'bg-emerald-500' : r['Efectividad (%)'] >= 75 ? 'bg-amber-500' : 'bg-rose-500'}`}
+                                    style={{ width: `${r['Efectividad (%)']}%` }}
+                                  />
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 ) : (
                   <div className="flex-1 h-full w-full">
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart
-                        data={routePerformanceData}
+                        data={sortedRoutePerformanceData}
                         layout="vertical"
                         margin={{ top: 5, right: 10, left: -20, bottom: 5 }}
                       >
                         <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
-                        <XAxis type="number" tickLine={false} axisLine={false} tick={{ fontSize: 9 }} unit="k" />
+                        <XAxis type="number" tickLine={false} axisLine={false} tick={{ fontSize: 9 }} />
                         <YAxis 
                           type="category" 
                           dataKey="Ruta" 
@@ -1186,14 +2225,16 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
                             fontSize: '11px'
                           }}
                           formatter={(value, name) => {
+                            if (name === 'Viajes') return [`${value} viajes`, 'Cantidad de Viajes'];
                             if (name === 'Carga (M$)') return [`$${(Number(value) * 1000).toLocaleString('es-CL')}`, 'Volumen de Carga'];
                             if (name === 'Efectividad (%)') return [`${value}%`, 'Efectividad'];
                             return [value, name];
                           }}
                         />
                         <Bar 
-                          dataKey="Carga (M$)" 
-                          fill="#4f46e5" 
+                          dataKey="Viajes" 
+                          name="Viajes"
+                          fill="#6366f1" 
                           radius={[0, 4, 4, 0]} 
                           maxBarSize={16} 
                           cursor="pointer"
@@ -1210,6 +2251,7 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
                         />
                         <Bar 
                           dataKey="Efectividad (%)" 
+                          name="Efectividad (%)"
                           fill="#10b981" 
                           radius={[0, 4, 4, 0]} 
                           maxBarSize={6} 
@@ -1233,33 +2275,109 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
 
               {/* Driver Efficiency Leaderboard Table */}
               <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm flex flex-col h-[400px]">
-                <div className="mb-4 flex items-center justify-between">
+                <div className="mb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <div className="text-left">
-                    <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-                      <Award className="w-4 h-4 text-amber-500" /> Desempeño y Productividad de Operadores / Choferes
-                    </h3>
-                    <p className="text-[10px] text-slate-400 font-medium font-sans">Métricas logísticas por operador de flota (rutas conducidas, eficacia de entrega y viajes promedio).</p>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                        <Award className="w-4 h-4 text-amber-500" /> Desempeño y Productividad de Choferes
+                      </h3>
+                      {/* Summary badges */}
+                      <div className="hidden xl:flex items-center gap-1.5 ml-2">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black bg-emerald-50 text-emerald-700 border border-emerald-200 font-mono">
+                          <Truck className="w-2.5 h-2.5 text-emerald-600" /> {driverTeamTotals.totalEntregas} Entregas ({driverTeamTotals.pctEntregas}%)
+                        </span>
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black bg-indigo-50 text-indigo-700 border border-indigo-200 font-mono">
+                          <RotateCcw className="w-2.5 h-2.5 text-indigo-600" /> {driverTeamTotals.totalRetiros} Retiros ({driverTeamTotals.pctRetiros}%)
+                        </span>
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-slate-400 font-medium font-sans">
+                      Evaluación de volumen de entregas vs. retiros (cantidad y %), efectividad de cumplimiento y kilometraje.
+                    </p>
+                  </div>
+
+                  {/* Toggle between Table and Chart */}
+                  <div className="flex items-center bg-slate-100 p-0.5 rounded-xl self-start sm:self-auto shrink-0">
+                    <button
+                      onClick={() => setDriverViewMode('TABLE')}
+                      className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-extrabold transition-all cursor-pointer ${
+                        driverViewMode === 'TABLE'
+                          ? 'bg-white text-indigo-600 shadow-sm'
+                          : 'text-slate-500 hover:text-slate-800'
+                      }`}
+                    >
+                      <Table className="w-3 h-3" />
+                      <span>Tabla</span>
+                    </button>
+                    <button
+                      onClick={() => setDriverViewMode('CHART')}
+                      className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-extrabold transition-all cursor-pointer ${
+                        driverViewMode === 'CHART'
+                          ? 'bg-white text-indigo-600 shadow-sm'
+                          : 'text-slate-500 hover:text-slate-800'
+                      }`}
+                    >
+                      <BarChart2 className="w-3 h-3" />
+                      <span>Gráfico</span>
+                    </button>
                   </div>
                 </div>
 
-                <div className="flex-1 overflow-auto border border-slate-100 rounded-2xl">
-                  {driverPerformanceData.length === 0 ? (
-                    <div className="h-full flex items-center justify-center text-slate-400 text-xs italic">
-                      Sin datos de operadores
-                    </div>
-                  ) : (
-                    <table className="w-full text-left border-collapse text-xs">
-                      <thead className="bg-slate-50 sticky top-0 border-b border-slate-100">
+                {driverPerformanceData.length === 0 ? (
+                  <div className="h-full flex items-center justify-center text-slate-400 text-xs italic">
+                    Sin datos de operadores
+                  </div>
+                ) : driverViewMode === 'TABLE' ? (
+                  <div className="flex-1 overflow-auto border border-slate-100 rounded-2xl">
+                    <table className="w-full text-left border-collapse text-xs min-w-[560px]">
+                      <thead className="bg-slate-50 sticky top-0 border-b border-slate-100 select-none">
                         <tr className="text-[9px] font-extrabold text-slate-400 uppercase tracking-widest">
-                          <th className="px-4 py-3">Operador / Conductor</th>
-                          <th className="px-3 py-3 text-center">Viajes</th>
-                          <th className="px-3 py-3 text-center">Entregas (Pts)</th>
-                          <th className="px-3 py-3 text-center">Km Prom.</th>
-                          <th className="px-4 py-3 text-right">Efectividad</th>
+                          <th className="px-3 py-2.5 cursor-pointer hover:text-indigo-600 transition-colors" onClick={() => handleSortDriver('Chofer')}>
+                            <div className="flex items-center gap-1">
+                              <span>Conductor</span>
+                              <ArrowUpDown className="w-2.5 h-2.5 opacity-60" />
+                            </div>
+                          </th>
+                          <th className="px-2 py-2.5 text-center cursor-pointer hover:text-indigo-600 transition-colors" onClick={() => handleSortDriver('Rutas')}>
+                            <div className="flex items-center justify-center gap-1">
+                              <span>Viajes</span>
+                              <ArrowUpDown className="w-2.5 h-2.5 opacity-60" />
+                            </div>
+                          </th>
+                          <th className="px-2.5 py-2.5 text-center cursor-pointer hover:text-emerald-700 transition-colors bg-emerald-50/40" onClick={() => handleSortDriver('Entregas')}>
+                            <div className="flex items-center justify-center gap-1">
+                              <span className="text-emerald-700">Entregas</span>
+                              <ArrowUpDown className="w-2.5 h-2.5 opacity-60 text-emerald-600" />
+                            </div>
+                          </th>
+                          <th className="px-2.5 py-2.5 text-center cursor-pointer hover:text-indigo-700 transition-colors bg-indigo-50/40" onClick={() => handleSortDriver('Retiros')}>
+                            <div className="flex items-center justify-center gap-1">
+                              <span className="text-indigo-700">Retiros</span>
+                              <ArrowUpDown className="w-2.5 h-2.5 opacity-60 text-indigo-600" />
+                            </div>
+                          </th>
+                          <th className="px-2 py-2.5 text-center cursor-pointer hover:text-indigo-600 transition-colors" onClick={() => handleSortDriver('Documentos')}>
+                            <div className="flex items-center justify-center gap-1">
+                              <span>Total Pts</span>
+                              <ArrowUpDown className="w-2.5 h-2.5 opacity-60" />
+                            </div>
+                          </th>
+                          <th className="px-2 py-2.5 text-center cursor-pointer hover:text-indigo-600 transition-colors" onClick={() => handleSortDriver('Km Promedio')}>
+                            <div className="flex items-center justify-center gap-1">
+                              <span>Km Prom.</span>
+                              <ArrowUpDown className="w-2.5 h-2.5 opacity-60" />
+                            </div>
+                          </th>
+                          <th className="px-3 py-2.5 text-right cursor-pointer hover:text-indigo-600 transition-colors" onClick={() => handleSortDriver('Efectividad (%)')}>
+                            <div className="flex items-center justify-end gap-1">
+                              <span>OTIF (%)</span>
+                              <ArrowUpDown className="w-2.5 h-2.5 opacity-60" />
+                            </div>
+                          </th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
-                        {driverPerformanceData.map((d, idx) => (
+                        {sortedDriverPerformanceData.map((d, idx) => (
                           <tr 
                             key={idx} 
                             onClick={() => {
@@ -1271,25 +2389,47 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
                             }}
                             className="hover:bg-indigo-50/40 cursor-pointer transition-colors"
                           >
-                            <td className="px-4 py-3 flex items-center gap-2">
-                              <span className="w-5 h-5 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center text-[10px] font-bold font-mono">
-                                {idx + 1}
-                              </span>
-                              <span className="font-bold text-slate-800 truncate max-w-[120px]">{d.Chofer}</span>
+                            <td className="px-3 py-2 text-left">
+                              <div className="flex items-center gap-1.5">
+                                <span className="w-4 h-4 rounded-md bg-indigo-50 text-indigo-600 flex items-center justify-center text-[9px] font-bold font-mono shrink-0">
+                                  {idx + 1}
+                                </span>
+                                <span className="font-bold text-slate-800 truncate max-w-[110px]" title={d.Chofer}>{d.Chofer}</span>
+                              </div>
                             </td>
-                            <td className="px-3 py-3 text-center font-bold text-slate-600 font-mono">
+                            <td className="px-2 py-2 text-center font-bold text-slate-600 font-mono text-[11px]">
                               {d.Rutas}
                             </td>
-                            <td className="px-3 py-3 text-center font-bold text-slate-600 font-mono">
+                            <td className="px-2.5 py-2 text-center bg-emerald-50/20">
+                              <div className="flex items-center justify-center gap-1">
+                                <span className="font-black text-slate-800 font-mono text-xs">{d.Entregas}</span>
+                                <span className="text-[10px] font-extrabold text-emerald-700 bg-emerald-100/70 px-1 py-0.2 rounded font-mono">
+                                  {d['Entregas (%)']}%
+                                </span>
+                              </div>
+                            </td>
+                            <td className="px-2.5 py-2 text-center bg-indigo-50/20">
+                              <div className="flex items-center justify-center gap-1">
+                                <span className="font-black text-slate-800 font-mono text-xs">{d.Retiros}</span>
+                                <span className="text-[10px] font-extrabold text-indigo-700 bg-indigo-100/70 px-1 py-0.2 rounded font-mono">
+                                  {d['Retiros (%)']}%
+                                </span>
+                              </div>
+                            </td>
+                            <td className="px-2 py-2 text-center font-bold text-slate-600 font-mono text-[11px]">
                               {d.Documentos}
                             </td>
-                            <td className="px-3 py-3 text-center font-bold text-slate-400 font-mono">
+                            <td className="px-2 py-2 text-center font-semibold text-slate-400 font-mono text-[10px]">
                               {d['Km Promedio'] > 0 ? `${d['Km Promedio']} km` : '-'}
                             </td>
-                            <td className="px-4 py-3 text-right">
+                            <td className="px-3 py-2 text-right">
                               <div className="flex items-center justify-end gap-1.5">
-                                <span className="font-mono font-black text-slate-900">{d['Efectividad (%)']}%</span>
-                                <div className="w-8 bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                                <span className={`inline-block font-mono font-black text-[11px] ${
+                                  d['Efectividad (%)'] >= 90 ? 'text-emerald-700' : d['Efectividad (%)'] >= 75 ? 'text-amber-700' : 'text-rose-700'
+                                }`}>
+                                  {d['Efectividad (%)']}%
+                                </span>
+                                <div className="w-6 bg-slate-100 h-1.5 rounded-full overflow-hidden shrink-0">
                                   <div 
                                     className={`h-full rounded-full ${d['Efectividad (%)'] >= 90 ? 'bg-emerald-500' : d['Efectividad (%)'] >= 75 ? 'bg-amber-500' : 'bg-rose-500'}`}
                                     style={{ width: `${d['Efectividad (%)']}%` }}
@@ -1301,8 +2441,64 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
                         ))}
                       </tbody>
                     </table>
-                  )}
-                </div>
+                  </div>
+                ) : (
+                  <div className="flex-1 h-full w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart
+                        data={sortedDriverPerformanceData}
+                        layout="vertical"
+                        margin={{ top: 5, right: 15, left: -15, bottom: 5 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
+                        <XAxis type="number" tickLine={false} axisLine={false} tick={{ fontSize: 9 }} />
+                        <YAxis 
+                          type="category" 
+                          dataKey="Chofer" 
+                          tickLine={false} 
+                          axisLine={false} 
+                          tick={{ fill: '#334155', fontSize: 9, fontWeight: 'bold' }} 
+                        />
+                        <Tooltip 
+                          contentStyle={{ 
+                            backgroundColor: '#0f172a', 
+                            border: 'none', 
+                            borderRadius: '12px', 
+                            color: '#fff',
+                            fontSize: '11px'
+                          }}
+                          formatter={(value, name) => {
+                            if (name === 'Entregas') return [`${value} entregas`, 'Entregas (Cant)'];
+                            if (name === 'Retiros') return [`${value} retiros`, 'Retiros (Cant)'];
+                            return [value, name];
+                          }}
+                        />
+                        <Legend 
+                          verticalAlign="top" 
+                          height={26} 
+                          iconSize={8}
+                          wrapperStyle={{ fontSize: '10px', fontWeight: 'bold' }}
+                        />
+                        <Bar 
+                          dataKey="Entregas" 
+                          name="Entregas" 
+                          fill="#10b981" 
+                          stackId="ops"
+                          radius={[0, 0, 0, 0]} 
+                          maxBarSize={16} 
+                        />
+                        <Bar 
+                          dataKey="Retiros" 
+                          name="Retiros" 
+                          fill="#6366f1" 
+                          stackId="ops"
+                          radius={[0, 4, 4, 0]} 
+                          maxBarSize={16} 
+                        />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
               </div>
 
             </div>
@@ -1345,9 +2541,23 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
                             dataKey="Vehiculo" 
                             tickLine={false} 
                             axisLine={false} 
-                            tick={{ fill: '#475569', fontSize: 8, fontWeight: 'bold' }} 
-                            formatter={(value: string) => {
-                              return value.split(' - ')[0] || value;
+                            interval={0}
+                            height={48}
+                            tick={(props: any) => {
+                              const { x, y, payload } = props;
+                              const rawValue = payload?.value || '';
+                              const parts = rawValue.split(' - ');
+                              const plate = parts[0]?.trim() || rawValue;
+                              const model = parts.slice(1).join(' - ').trim();
+
+                              return (
+                                <g transform={`translate(${x},${y})`}>
+                                  <text x={0} y={0} dy={8} textAnchor="middle" fill="#334155" fontSize={9} fontWeight="800" fontFamily="sans-serif">
+                                    <tspan x={0} dy="0">{plate}</tspan>
+                                    {model ? <tspan x={0} dy="11" fill="#64748b" fontSize={8} fontWeight="600">{model}</tspan> : null}
+                                  </text>
+                                </g>
+                              );
                             }}
                           />
                           <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 9 }} />
@@ -1427,17 +2637,42 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
                       </div>
                     ) : (
                       <table className="w-full text-left border-collapse text-xs">
-                        <thead className="bg-slate-50 border-b border-slate-150 sticky top-0">
+                        <thead className="bg-slate-50 border-b border-slate-150 sticky top-0 select-none">
                           <tr className="text-[9px] font-extrabold text-slate-400 uppercase tracking-widest">
-                            <th className="px-3 py-2">Patente / Modelo</th>
-                            <th className="px-2 py-2 text-center">Viajes</th>
-                            <th className="px-2 py-2 text-center">Km Tot.</th>
-                            <th className="px-2 py-2 text-right">Carga Total</th>
-                            <th className="px-3 py-2 text-right">OTIF (%)</th>
+                            <th className="px-3 py-2 cursor-pointer hover:text-indigo-600 transition-colors" onClick={() => handleSortVehicle('Vehiculo')}>
+                              <div className="flex items-center gap-1">
+                                <span>Patente / Modelo</span>
+                                <ArrowUpDown className="w-2.5 h-2.5 opacity-60" />
+                              </div>
+                            </th>
+                            <th className="px-2 py-2 text-center cursor-pointer hover:text-indigo-600 transition-colors" onClick={() => handleSortVehicle('Rutas')}>
+                              <div className="flex items-center justify-center gap-1">
+                                <span>Viajes</span>
+                                <ArrowUpDown className="w-2.5 h-2.5 opacity-60" />
+                              </div>
+                            </th>
+                            <th className="px-2 py-2 text-center cursor-pointer hover:text-indigo-600 transition-colors" onClick={() => handleSortVehicle('Km Totales')}>
+                              <div className="flex items-center justify-center gap-1">
+                                <span>Km Tot.</span>
+                                <ArrowUpDown className="w-2.5 h-2.5 opacity-60" />
+                              </div>
+                            </th>
+                            <th className="px-2 py-2 text-right cursor-pointer hover:text-indigo-600 transition-colors" onClick={() => handleSortVehicle('Carga Total Valor ($)')}>
+                              <div className="flex items-center justify-end gap-1">
+                                <span>Carga Total</span>
+                                <ArrowUpDown className="w-2.5 h-2.5 opacity-60" />
+                              </div>
+                            </th>
+                            <th className="px-3 py-2 text-right cursor-pointer hover:text-indigo-600 transition-colors" onClick={() => handleSortVehicle('Efectividad (%)')}>
+                              <div className="flex items-center justify-end gap-1">
+                                <span>OTIF (%)</span>
+                                <ArrowUpDown className="w-2.5 h-2.5 opacity-60" />
+                              </div>
+                            </th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                          {vehiclePerformanceData.map((v, idx) => (
+                          {sortedVehiclePerformanceData.map((v, idx) => (
                             <tr 
                               key={idx} 
                               onClick={() => {
@@ -1487,6 +2722,161 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
                   </div>
                 </div>
 
+              </div>
+
+              {/* Fleet Fuel Performance & Control Table */}
+              <div className="border border-slate-200/70 rounded-2xl p-5 bg-slate-50/50 mt-2 text-left">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+                  <div>
+                    <span className="text-[10px] font-black uppercase text-amber-600 tracking-wider block">Control de Consumo y Eficiencia</span>
+                    <h4 className="text-xs font-black text-slate-800 uppercase tracking-tight">Tabla de Desempeño Energético y Rendimiento de la Flota</h4>
+                  </div>
+                  <p className="text-[11px] text-slate-500 font-medium">
+                    Control de consumo de combustible en ruta vs. rendimiento nominal (km/L) configurado por vehículo.
+                  </p>
+                </div>
+
+                <div className="overflow-x-auto border border-slate-200/80 rounded-xl bg-white shadow-sm">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead className="bg-slate-100/80 border-b border-slate-200 sticky top-0 select-none">
+                      <tr className="text-[9px] font-extrabold text-slate-500 uppercase tracking-widest">
+                        <th className="px-3 py-2.5 cursor-pointer hover:text-indigo-600 transition-colors" onClick={() => handleSortFleetFuel('Vehiculo')}>
+                          <div className="flex items-center gap-1">
+                            <span>Vehículo (Patente / Modelo)</span>
+                            <ArrowUpDown className="w-2.5 h-2.5 opacity-60" />
+                          </div>
+                        </th>
+                        <th className="px-2 py-2.5 text-center cursor-pointer hover:text-indigo-600 transition-colors" onClick={() => handleSortFleetFuel('Km Totales')}>
+                          <div className="flex items-center justify-center gap-1">
+                            <span>Km en Ruta</span>
+                            <ArrowUpDown className="w-2.5 h-2.5 opacity-60" />
+                          </div>
+                        </th>
+                        <th className="px-2 py-2.5 text-center cursor-pointer hover:text-indigo-600 transition-colors" onClick={() => handleSortFleetFuel('Rendimiento Nominal')}>
+                          <div className="flex items-center justify-center gap-1">
+                            <span>Rend. Nominal</span>
+                            <ArrowUpDown className="w-2.5 h-2.5 opacity-60" />
+                          </div>
+                        </th>
+                        <th className="px-2 py-2.5 text-center cursor-pointer hover:text-indigo-600 transition-colors" onClick={() => handleSortFleetFuel('Litros Teoricos')}>
+                          <div className="flex items-center justify-center gap-1">
+                            <span>Consumo Teórico</span>
+                            <ArrowUpDown className="w-2.5 h-2.5 opacity-60" />
+                          </div>
+                        </th>
+                        <th className="px-2 py-2.5 text-right cursor-pointer hover:text-indigo-600 transition-colors" onClick={() => handleSortFleetFuel('Costo Combustible ($)')}>
+                          <div className="flex items-center justify-end gap-1">
+                            <span>Gasto Real ($)</span>
+                            <ArrowUpDown className="w-2.5 h-2.5 opacity-60" />
+                          </div>
+                        </th>
+                        <th className="px-2 py-2.5 text-center cursor-pointer hover:text-indigo-600 transition-colors" onClick={() => handleSortFleetFuel('Litros Reales Est')}>
+                          <div className="flex items-center justify-center gap-1">
+                            <span>Litros Est. Reales</span>
+                            <ArrowUpDown className="w-2.5 h-2.5 opacity-60" />
+                          </div>
+                        </th>
+                        <th className="px-2 py-2.5 text-center cursor-pointer hover:text-indigo-600 transition-colors" onClick={() => handleSortFleetFuel('Rendimiento Observado')}>
+                          <div className="flex items-center justify-center gap-1">
+                            <span>Rend. Observado</span>
+                            <ArrowUpDown className="w-2.5 h-2.5 opacity-60" />
+                          </div>
+                        </th>
+                        <th className="px-3 py-2.5 text-center cursor-pointer hover:text-indigo-600 transition-colors" onClick={() => handleSortFleetFuel('Desviacion Pct')}>
+                          <div className="flex items-center justify-center gap-1">
+                            <span>Desempeño / Control</span>
+                            <ArrowUpDown className="w-2.5 h-2.5 opacity-60" />
+                          </div>
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {sortedFleetFuelPerformanceData.length === 0 ? (
+                        <tr>
+                          <td colSpan={8} className="px-4 py-8 text-center text-slate-400 italic">
+                            Sin datos de vehículos o rutas registradas
+                          </td>
+                        </tr>
+                      ) : (
+                        sortedFleetFuelPerformanceData.map((v, idx) => {
+                          const hasNominal = v['Rendimiento Nominal'] > 0;
+                          const hasCost = v['Costo Combustible ($)'] > 0;
+                          const dev = v['Desviacion Pct'];
+
+                          return (
+                            <tr key={idx} className="hover:bg-indigo-50/30 transition-colors">
+                              <td className="px-3 py-2.5">
+                                <div className="flex flex-col">
+                                  <span className="font-black text-slate-800 font-mono text-xs">{v.Plate}</span>
+                                  <span className="text-[10px] text-slate-400 font-medium">{v.Model || 'Sin modelo'}</span>
+                                </div>
+                              </td>
+                              <td className="px-2 py-2.5 text-center font-bold text-slate-700 font-mono text-xs">
+                                {v['Km Totales'].toLocaleString('es-CL')} km
+                              </td>
+                              <td className="px-2 py-2.5 text-center font-bold font-mono">
+                                {hasNominal ? (
+                                  <span className="text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-2 py-0.5 rounded-md text-[11px]">
+                                    {v['Rendimiento Nominal'].toFixed(1)} km/L
+                                  </span>
+                                ) : (
+                                  <span className="text-slate-400 text-[10px]">Sin Config.</span>
+                                )}
+                              </td>
+                              <td className="px-2 py-2.5 text-center font-semibold text-slate-600 font-mono text-xs">
+                                {hasNominal ? `${v['Litros Teoricos'].toFixed(1)} L` : '-'}
+                              </td>
+                              <td className="px-2 py-2.5 text-right font-extrabold text-amber-700 font-mono text-xs">
+                                {hasCost ? formatCLP(v['Costo Combustible ($)']) : '-'}
+                              </td>
+                              <td className="px-2 py-2.5 text-center font-semibold text-slate-600 font-mono text-xs">
+                                {hasCost ? `${v['Litros Reales Est'].toFixed(1)} L` : '-'}
+                              </td>
+                              <td className="px-2 py-2.5 text-center font-mono font-bold">
+                                {hasCost && v['Rendimiento Observado'] > 0 ? (
+                                  <span className={`px-2 py-0.5 rounded-md text-[11px] ${
+                                    hasNominal && v['Rendimiento Observado'] >= v['Rendimiento Nominal'] * 0.95
+                                      ? 'text-emerald-700 bg-emerald-50'
+                                      : hasNominal
+                                      ? 'text-amber-700 bg-amber-50'
+                                      : 'text-slate-700 bg-slate-100'
+                                  }`}>
+                                    {v['Rendimiento Observado'].toFixed(1)} km/L
+                                  </span>
+                                ) : (
+                                  <span className="text-slate-400 text-[10px]">-</span>
+                                )}
+                              </td>
+                              <td className="px-3 py-2.5 text-center">
+                                {!hasNominal ? (
+                                  <span className="inline-block px-2 py-0.5 rounded text-[9px] font-medium bg-slate-100 text-slate-400">
+                                    Sin Rend. Nominal
+                                  </span>
+                                ) : !hasCost ? (
+                                  <span className="inline-block px-2 py-0.5 rounded text-[9px] font-medium bg-slate-100 text-slate-400">
+                                    Sin Gasto Registrado
+                                  </span>
+                                ) : dev !== null && dev > 5 ? (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-rose-50 text-rose-700 border border-rose-200 font-mono">
+                                    ▲ +{dev.toFixed(1)}% Exceso Lts
+                                  </span>
+                                ) : dev !== null && dev < -5 ? (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200 font-mono">
+                                    ▼ {dev.toFixed(1)}% Ahorro Lts
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200 font-mono">
+                                    ✓ Normal / Eficiente
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
 

@@ -23,6 +23,7 @@ export interface PendingDocument {
 export interface LogisticsRoute {
   id: string;
   name: string;
+  group?: string;
   createdAt?: any;
 }
 
@@ -36,6 +37,7 @@ export interface LogisticsVehicle {
   id: string;
   plate: string;
   description: string;
+  nominalKmPerLiter?: number;
   createdAt?: any;
 }
 

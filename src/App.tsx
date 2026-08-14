@@ -111,9 +111,28 @@ export default function App() {
   const [drivers, setDrivers] = useState<LogisticsDriver[]>([]);
   const [vehicles, setVehicles] = useState<LogisticsVehicle[]>([]);
   const [manifests, setManifests] = useState<Record<string, LogisticsManifest>>({});
+  const [fuelCosts, setFuelCosts] = useState<Record<string, Record<string, Record<string, number>>>>({});
   const [requests, setRequests] = useState<LogisticsRequest[]>([]);
   const [isAlarmOpen, setIsAlarmOpen] = useState(false);
   const [lastTriggeredTime, setLastTriggeredTime] = useState<string>('');
+
+  useEffect(() => {
+    const fuelCostsCol = collection(db, "fuel_costs");
+    const unsub = onSnapshot(fuelCostsCol, (snapshot) => {
+      const data: Record<string, Record<string, Record<string, number>>> = {};
+      snapshot.docs.forEach((doc) => {
+        const yearKey = doc.id;
+        const dData = doc.data();
+        if (dData && dData.costs) {
+          data[yearKey] = dData.costs;
+        }
+      });
+      setFuelCosts(data);
+    }, (err) => {
+      console.error("Error listening to fuel_costs:", err);
+    });
+    return () => unsub();
+  }, []);
   
   const [loading, setLoading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | null>(null);
@@ -2485,6 +2504,7 @@ export default function App() {
             loading={loading}
             setLoading={setLoading}
             setSelectedRoutes={setSelectedRoutes}
+            fuelCosts={fuelCosts}
           />
         )}
       </AnimatePresence>
@@ -5648,6 +5668,9 @@ export default function App() {
             routeMap={routeMap}
             driverMap={driverMap}
             vehicleMap={vehicleMap}
+            fuelCosts={fuelCosts}
+            vehicles={vehicles}
+            routes={routes}
           />
         )}
 
