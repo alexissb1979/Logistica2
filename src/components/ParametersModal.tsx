@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion } from 'motion/react';
-import { X, MapPin, Plus, Edit2, Trash2, User, Truck, Save, Coins, Calendar as CalendarIcon } from 'lucide-react';
+import { X, MapPin, Plus, Edit2, Trash2, User, Truck, Save, Coins, Calendar as CalendarIcon, Search } from 'lucide-react';
 import { LogisticsRoute, LogisticsDriver, LogisticsVehicle, LogisticsAssignment } from '../types';
+import { OFFICIAL_VEHICLES_SEED } from '../data/officialVehicles';
 import { db } from '../firebase';
 import { collection, addDoc, setDoc, doc, deleteDoc, serverTimestamp, getDoc } from 'firebase/firestore';
 
@@ -70,9 +71,20 @@ export default function ParametersModal({
   const [newRouteName, setNewRouteName] = useState('');
   const [newRouteGroup, setNewRouteGroup] = useState('');
   const [newDriverName, setNewDriverName] = useState('');
+
+  // Vehicle Input states
   const [newVehiclePlate, setNewVehiclePlate] = useState('');
   const [newVehicleDesc, setNewVehicleDesc] = useState('');
   const [newVehicleNominalKm, setNewVehicleNominalKm] = useState('');
+  const [newVehicleYear, setNewVehicleYear] = useState('');
+  const [newVehicleFuelType, setNewVehicleFuelType] = useState('Diésel');
+  const [newVehicleLoadCapacity, setNewVehicleLoadCapacity] = useState('');
+  const [newVehicleEngineNumber, setNewVehicleEngineNumber] = useState('');
+  const [newVehicleChassisNumber, setNewVehicleChassisNumber] = useState('');
+  const [newVehicleLastMaintenanceDate, setNewVehicleLastMaintenanceDate] = useState('');
+  const [newVehicleTechnicalInspectionDate, setNewVehicleTechnicalInspectionDate] = useState('');
+  const [newVehicleEmissionsInspectionDate, setNewVehicleEmissionsInspectionDate] = useState('');
+  const [newVehicleBillingRut, setNewVehicleBillingRut] = useState('');
 
   // Editing states
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
@@ -80,6 +92,52 @@ export default function ParametersModal({
   const [editingItemGroup, setEditingItemGroup] = useState('');
   const [editingItemExtra, setEditingItemExtra] = useState('');
   const [editingItemNominalKm, setEditingItemNominalKm] = useState('');
+  const [editingVehicleYear, setEditingVehicleYear] = useState('');
+  const [editingVehicleFuelType, setEditingVehicleFuelType] = useState('Diésel');
+  const [editingVehicleLoadCapacity, setEditingVehicleLoadCapacity] = useState('');
+  const [editingVehicleEngineNumber, setEditingVehicleEngineNumber] = useState('');
+  const [editingVehicleChassisNumber, setEditingVehicleChassisNumber] = useState('');
+  const [editingVehicleLastMaintenanceDate, setEditingVehicleLastMaintenanceDate] = useState('');
+  const [editingVehicleTechnicalInspectionDate, setEditingVehicleTechnicalInspectionDate] = useState('');
+  const [editingVehicleEmissionsInspectionDate, setEditingVehicleEmissionsInspectionDate] = useState('');
+  const [editingVehicleBillingRut, setEditingVehicleBillingRut] = useState('');
+
+  // Search filter state
+  const [searchTerm, setSearchTerm] = useState('');
+  const [showAddVehicleForm, setShowAddVehicleForm] = useState(false);
+
+  // Filtered lists based on search
+  const filteredVehicles = useMemo(() => {
+    if (!searchTerm.trim()) return vehicles;
+    const term = searchTerm.toLowerCase().trim();
+    return vehicles.filter(v => 
+      (v.plate || '').toLowerCase().includes(term) ||
+      (v.description || '').toLowerCase().includes(term) ||
+      (v.fuelType || '').toLowerCase().includes(term) ||
+      (v.billingRut || '').toLowerCase().includes(term) ||
+      (v.engineNumber || '').toLowerCase().includes(term) ||
+      (v.chassisNumber || '').toLowerCase().includes(term) ||
+      (v.loadCapacity || '').toLowerCase().includes(term) ||
+      String(v.year || '').includes(term)
+    );
+  }, [vehicles, searchTerm]);
+
+  const filteredRoutes = useMemo(() => {
+    if (!searchTerm.trim()) return routes;
+    const term = searchTerm.toLowerCase().trim();
+    return routes.filter(r => 
+      (r.name || '').toLowerCase().includes(term) ||
+      (r.group || '').toLowerCase().includes(term)
+    );
+  }, [routes, searchTerm]);
+
+  const filteredDrivers = useMemo(() => {
+    if (!searchTerm.trim()) return drivers;
+    const term = searchTerm.toLowerCase().trim();
+    return drivers.filter(d => 
+      (d.name || '').toLowerCase().includes(term)
+    );
+  }, [drivers, searchTerm]);
 
   // Unique list of existing route groups
   const existingRouteGroups = useMemo(() => {
@@ -235,14 +293,33 @@ export default function ParametersModal({
       setLoading(true);
       const kmL = parseFloat(newVehicleNominalKm) || 0;
       await addDoc(vehiclesCol, { 
-        plate: newVehiclePlate.trim(), 
-        description: newVehicleDesc, 
+        plate: newVehiclePlate.trim().toUpperCase(), 
+        description: newVehicleDesc.trim(), 
         nominalKmPerLiter: kmL,
+        year: newVehicleYear.trim(),
+        fuelType: newVehicleFuelType.trim(),
+        loadCapacity: newVehicleLoadCapacity.trim(),
+        engineNumber: newVehicleEngineNumber.trim(),
+        chassisNumber: newVehicleChassisNumber.trim(),
+        lastMaintenanceDate: newVehicleLastMaintenanceDate,
+        technicalInspectionDate: newVehicleTechnicalInspectionDate,
+        emissionsInspectionDate: newVehicleEmissionsInspectionDate,
+        billingRut: newVehicleBillingRut.trim(),
         createdAt: serverTimestamp() 
       });
       setNewVehiclePlate('');
       setNewVehicleDesc('');
       setNewVehicleNominalKm('');
+      setNewVehicleYear('');
+      setNewVehicleFuelType('Diésel');
+      setNewVehicleLoadCapacity('');
+      setNewVehicleEngineNumber('');
+      setNewVehicleChassisNumber('');
+      setNewVehicleLastMaintenanceDate('');
+      setNewVehicleTechnicalInspectionDate('');
+      setNewVehicleEmissionsInspectionDate('');
+      setNewVehicleBillingRut('');
+      setShowAddVehicleForm(false);
     } catch (error: any) { 
       alert(`Error: ${error.message}`); 
     } finally { 
@@ -250,14 +327,23 @@ export default function ParametersModal({
     }
   };
 
-  const handleUpdateVehicle = async (id: string, plate: string, desc: string, nominalKmStr: string) => {
-    if (!plate.trim()) return;
+  const handleUpdateVehicle = async (id: string) => {
+    if (!editingItemValue.trim()) return;
     try { 
-      const kmL = parseFloat(nominalKmStr) || 0;
+      const kmL = parseFloat(editingItemNominalKm) || 0;
       await setDoc(doc(vehiclesCol, id), { 
-        plate: plate.trim(), 
-        description: desc,
-        nominalKmPerLiter: kmL 
+        plate: editingItemValue.trim().toUpperCase(), 
+        description: editingItemExtra.trim(),
+        nominalKmPerLiter: kmL,
+        year: editingVehicleYear.trim(),
+        fuelType: editingVehicleFuelType.trim(),
+        loadCapacity: editingVehicleLoadCapacity.trim(),
+        engineNumber: editingVehicleEngineNumber.trim(),
+        chassisNumber: editingVehicleChassisNumber.trim(),
+        lastMaintenanceDate: editingVehicleLastMaintenanceDate,
+        technicalInspectionDate: editingVehicleTechnicalInspectionDate,
+        emissionsInspectionDate: editingVehicleEmissionsInspectionDate,
+        billingRut: editingVehicleBillingRut.trim(),
       }, { merge: true }); 
       setEditingItemId(null); 
     } catch (e: any) { 
@@ -271,6 +357,49 @@ export default function ParametersModal({
       await deleteDoc(doc(vehiclesCol, id)); 
     } catch (e: any) { 
       alert(e.message); 
+    }
+  };
+
+  const handleSyncOfficialVehicles = async () => {
+    try {
+      setLoading(true);
+      let updatedCount = 0;
+      let addedCount = 0;
+
+      for (const item of OFFICIAL_VEHICLES_SEED) {
+        const existingVeh = vehicles.find(v => v.plate.trim().toUpperCase() === item.plate.trim().toUpperCase());
+        if (existingVeh) {
+          await setDoc(doc(vehiclesCol, existingVeh.id), {
+            year: item.year,
+            fuelType: item.fuelType,
+            loadCapacity: item.loadCapacity,
+            engineNumber: item.engineNumber,
+            chassisNumber: item.chassisNumber,
+            billingRut: item.billingRut
+          }, { merge: true });
+          updatedCount++;
+        } else {
+          await addDoc(vehiclesCol, {
+            plate: item.plate,
+            description: "Vehículo de Flota",
+            nominalKmPerLiter: 10,
+            year: item.year,
+            fuelType: item.fuelType,
+            loadCapacity: item.loadCapacity,
+            engineNumber: item.engineNumber,
+            chassisNumber: item.chassisNumber,
+            billingRut: item.billingRut,
+            createdAt: serverTimestamp()
+          });
+          addedCount++;
+        }
+      }
+      alert(`Sincronización completada exitosamente.\nVehículos actualizados: ${updatedCount}\nVehículos nuevos creados: ${addedCount}`);
+    } catch (e: any) {
+      console.error("Error al sincronizar vehículos:", e);
+      alert(`Error al guardar los vehículos en Firestore: ${e.message}`);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -331,6 +460,43 @@ export default function ParametersModal({
             <Coins className="w-3.5 h-3.5 text-amber-500" />
             <span>Combustible</span>
           </button>
+        </div>
+
+        {/* Buscador Superior */}
+        <div className="px-6 py-3 bg-slate-50/90 border-b border-slate-200/80 flex items-center justify-between gap-3">
+          <div className="relative flex-1">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder={
+                paramsTab === 'vehicles' ? "Buscar vehículo por patente, modelo, RUT, motor, chasis, combustible..." :
+                paramsTab === 'routes' ? "Buscar ruta por nombre o agrupador..." :
+                paramsTab === 'drivers' ? "Buscar conductor por nombre..." :
+                "Buscar vehículo por patente o modelo..."
+              }
+              className="w-full bg-white border border-slate-200 rounded-xl pl-10 pr-9 py-2 text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 focus:outline-none shadow-2xs transition-all placeholder:text-slate-400"
+            />
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={() => setSearchTerm('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100 transition-colors cursor-pointer"
+                title="Limpiar búsqueda"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+          {searchTerm && (
+            <span className="text-[11px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200/80 px-2.5 py-1 rounded-lg shrink-0 shadow-2xs">
+              {paramsTab === 'vehicles' ? `${filteredVehicles.length} de ${vehicles.length}` :
+               paramsTab === 'routes' ? `${filteredRoutes.length} de ${routes.length}` :
+               paramsTab === 'drivers' ? `${filteredDrivers.length} de ${drivers.length}` :
+               `${filteredVehicles.length} de ${vehicles.length}`}
+            </span>
+          )}
         </div>
 
         <div className="p-6 max-h-[450px] overflow-y-auto">
@@ -417,7 +583,12 @@ export default function ParametersModal({
               </div>
 
               <div className="flex flex-col gap-2">
-                {[...routes].sort((a,b) => {
+                {filteredRoutes.length === 0 && (
+                  <div className="py-8 text-center text-slate-400 text-xs font-semibold bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
+                    No se encontraron rutas que coincidan con "{searchTerm}".
+                  </div>
+                )}
+                {[...filteredRoutes].sort((a,b) => {
                   const grpA = a.group || '';
                   const grpB = b.group || '';
                   if (grpA !== grpB) return grpA.localeCompare(grpB);
@@ -536,7 +707,12 @@ export default function ParametersModal({
               </div>
 
               <div className="flex flex-col gap-2">
-                {[...drivers].sort((a,b) => (a.name || '').localeCompare(b.name || '')).map(d => (
+                {filteredDrivers.length === 0 && (
+                  <div className="py-8 text-center text-slate-400 text-xs font-semibold bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
+                    No se encontraron conductores que coincidan con "{searchTerm}".
+                  </div>
+                )}
+                {[...filteredDrivers].sort((a,b) => (a.name || '').localeCompare(b.name || '')).map(d => (
                   <div key={d.id} className="flex justify-between items-center bg-white p-3 rounded-xl border border-slate-100 shadow-sm transition-all hover:shadow-md hover:border-indigo-100 group">
                     {editingItemId === d.id ? (
                       <input 
@@ -572,107 +748,516 @@ export default function ParametersModal({
           )}
 
           {paramsTab === 'vehicles' && (
-            <div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-6">
-                <input 
-                  type="text" 
-                  className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold focus:ring-4 focus:ring-indigo-500/10 focus:outline-none focus:border-indigo-500 transition-all shadow-inner"
-                  placeholder="Patente (Ej: TTZH-93)..."
-                  value={newVehiclePlate}
-                  onChange={(e) => setNewVehiclePlate(e.target.value)}
-                />
-                <input 
-                  type="text" 
-                  className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold focus:ring-4 focus:ring-indigo-500/10 focus:outline-none focus:border-indigo-500 transition-all shadow-inner"
-                  placeholder="Modelo / Marca (Ej: MAHINDRA)..."
-                  value={newVehicleDesc}
-                  onChange={(e) => setNewVehicleDesc(e.target.value)}
-                />
-                <input 
-                  type="number" 
-                  step="0.1"
-                  min="0"
-                  className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold focus:ring-4 focus:ring-indigo-500/10 focus:outline-none focus:border-indigo-500 transition-all shadow-inner font-mono"
-                  placeholder="Rend. Nominal (km/L)..."
-                  value={newVehicleNominalKm}
-                  onChange={(e) => setNewVehicleNominalKm(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleAddVehicle()}
-                />
-                <button 
-                  onClick={handleAddVehicle}
-                  className="sm:col-span-3 bg-indigo-600 text-white px-4 py-3 rounded-xl hover:bg-indigo-500 font-bold text-xs shadow-lg shadow-indigo-200/50 flex items-center justify-center gap-2 cursor-pointer transition-all"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>Añadir Vehículo con Rendimiento</span>
-                </button>
+            <div className="flex flex-col gap-6 text-left">
+              {/* Sync Official Vehicles Action Card & Add Vehicle Button */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+                <div className="bg-gradient-to-r from-indigo-950 via-slate-900 to-indigo-900 text-white rounded-2xl p-4 shadow-md flex-1 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border border-indigo-800/40">
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <Truck className="w-4 h-4 text-amber-400" />
+                      <h3 className="text-xs font-black uppercase tracking-wider text-white">Catálogo Oficial de Flota (17 Vehículos)</h3>
+                    </div>
+                    <p className="text-[11px] text-slate-300">
+                      Carga o actualiza masivamente el Año, Combustible, Capacidad de carga, N° Motor y N° Chasis para las patentes oficiales.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleSyncOfficialVehicles}
+                    disabled={loading}
+                    className="bg-amber-400 hover:bg-amber-300 text-slate-950 px-4 py-2.5 rounded-xl text-xs font-black shadow-md transition-all shrink-0 cursor-pointer disabled:opacity-50 flex items-center gap-1.5 active:scale-95"
+                  >
+                    <Truck className="w-3.5 h-3.5" />
+                    <span>Cargar / Sincronizar Catálogo</span>
+                  </button>
+                </div>
+
+                {!showAddVehicleForm && (
+                  <button
+                    type="button"
+                    onClick={() => setShowAddVehicleForm(true)}
+                    className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-3 sm:py-2.5 rounded-2xl font-bold text-xs shadow-md shadow-indigo-200/50 flex items-center justify-center gap-2 transition-all shrink-0 cursor-pointer active:scale-95 border border-indigo-500"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Nuevo Vehículo</span>
+                  </button>
+                )}
               </div>
 
-              <div className="flex flex-col gap-2">
-                {[...vehicles].sort((a,b) => (a.plate || '').localeCompare(b.plate || '')).map(v => (
-                  <div key={v.id} className="flex justify-between items-center bg-white p-3 rounded-xl border border-slate-100 shadow-sm transition-all hover:shadow-md hover:border-indigo-100 group">
+              {/* Formulario Nuevo Vehículo (Desplegable) */}
+              {showAddVehicleForm && (
+                <div className="bg-slate-50/90 border border-indigo-200/80 rounded-2xl p-4 shadow-inner">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-[10px] font-black uppercase text-indigo-600 tracking-wider block">
+                      Añadir Nuevo Vehículo
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setShowAddVehicleForm(false)}
+                      className="p-1 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-200/60 transition-colors cursor-pointer"
+                      title="Cerrar formulario"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="text-[10px] font-extrabold text-slate-500 uppercase block mb-1">
+                        Patente <span className="text-rose-500">*</span>
+                      </label>
+                      <input 
+                        type="text" 
+                        className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold font-mono focus:ring-2 focus:ring-indigo-500 focus:outline-none uppercase"
+                        placeholder="Ej: TTZH-93"
+                        value={newVehiclePlate}
+                        onChange={(e) => setNewVehiclePlate(e.target.value)}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-extrabold text-slate-500 uppercase block mb-1">
+                        Modelo / Marca
+                      </label>
+                      <input 
+                        type="text" 
+                        className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                        placeholder="Ej: MAHINDRA HAWK 2.2"
+                        value={newVehicleDesc}
+                        onChange={(e) => setNewVehicleDesc(e.target.value)}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-extrabold text-slate-500 uppercase block mb-1">
+                        Rend. Nominal (km/L)
+                      </label>
+                      <input 
+                        type="number" 
+                        step="0.1"
+                        min="0"
+                        className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold font-mono focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                        placeholder="Ej: 10.5"
+                        value={newVehicleNominalKm}
+                        onChange={(e) => setNewVehicleNominalKm(e.target.value)}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-extrabold text-slate-500 uppercase block mb-1">
+                        Año
+                      </label>
+                      <input 
+                        type="number" 
+                        placeholder="Ej: 2022"
+                        className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold font-mono focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                        value={newVehicleYear}
+                        onChange={(e) => setNewVehicleYear(e.target.value)}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-extrabold text-slate-500 uppercase block mb-1">
+                        Combustible
+                      </label>
+                      <select 
+                        className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold focus:ring-2 focus:ring-indigo-500 focus:outline-none cursor-pointer"
+                        value={newVehicleFuelType}
+                        onChange={(e) => setNewVehicleFuelType(e.target.value)}
+                      >
+                        <option value="Diésel">Diésel</option>
+                        <option value="Bencina 93">Bencina 93</option>
+                        <option value="Bencina 95">Bencina 95</option>
+                        <option value="Bencina 97">Bencina 97</option>
+                        <option value="Gas / GLP">Gas / GLP</option>
+                        <option value="Eléctrico">Eléctrico</option>
+                        <option value="Híbrido">Híbrido</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-extrabold text-slate-500 uppercase block mb-1">
+                        Capacidad de Carga
+                      </label>
+                      <input 
+                        type="text" 
+                        placeholder="Ej: 1.5 Ton / 1500 kg"
+                        className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                        value={newVehicleLoadCapacity}
+                        onChange={(e) => setNewVehicleLoadCapacity(e.target.value)}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-extrabold text-slate-500 uppercase block mb-1">
+                        N° Motor
+                      </label>
+                      <input 
+                        type="text" 
+                        placeholder="N° de Motor"
+                        className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold font-mono focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                        value={newVehicleEngineNumber}
+                        onChange={(e) => setNewVehicleEngineNumber(e.target.value)}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-extrabold text-slate-500 uppercase block mb-1">
+                        N° Chasis
+                      </label>
+                      <input 
+                        type="text" 
+                        placeholder="N° de Chasis / VIN"
+                        className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold font-mono focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                        value={newVehicleChassisNumber}
+                        onChange={(e) => setNewVehicleChassisNumber(e.target.value)}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-extrabold text-slate-500 uppercase block mb-1">
+                        RUT Facturación
+                      </label>
+                      <input 
+                        type="text" 
+                        placeholder="Ej: 76.123.456-7"
+                        className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold font-mono focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                        value={newVehicleBillingRut}
+                        onChange={(e) => setNewVehicleBillingRut(e.target.value)}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-extrabold text-slate-500 uppercase block mb-1">
+                        Próxima Mantención (KM)
+                      </label>
+                      <input 
+                        type="number" 
+                        placeholder="Ej: 150000"
+                        className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold font-mono focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                        value={newVehicleLastMaintenanceDate}
+                        onChange={(e) => setNewVehicleLastMaintenanceDate(e.target.value)}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-extrabold text-slate-500 uppercase block mb-1">
+                        Fecha Revisión Técnica
+                      </label>
+                      <input 
+                        type="date" 
+                        className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                        value={newVehicleTechnicalInspectionDate}
+                        onChange={(e) => setNewVehicleTechnicalInspectionDate(e.target.value)}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-extrabold text-slate-500 uppercase block mb-1">
+                        Fecha Gases
+                      </label>
+                      <input 
+                        type="date" 
+                        className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                        value={newVehicleEmissionsInspectionDate}
+                        onChange={(e) => setNewVehicleEmissionsInspectionDate(e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end items-center gap-2 mt-4">
+                    <button
+                      type="button"
+                      onClick={() => setShowAddVehicleForm(false)}
+                      className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-200/70 transition-colors cursor-pointer"
+                    >
+                      Cancelar
+                    </button>
+                    <button 
+                      onClick={handleAddVehicle}
+                      disabled={loading || !newVehiclePlate.trim()}
+                      className="bg-indigo-600 text-white px-5 py-2.5 rounded-xl hover:bg-indigo-500 font-bold text-xs shadow-md shadow-indigo-200 flex items-center gap-2 cursor-pointer transition-all disabled:opacity-50"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>Guardar Nuevo Vehículo</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Lista de Vehículos Existentes */}
+              <div className="flex flex-col gap-3">
+                {filteredVehicles.length === 0 && (
+                  <div className="py-8 text-center text-slate-400 text-xs font-semibold bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
+                    No se encontraron vehículos que coincidan con "{searchTerm}".
+                  </div>
+                )}
+                {[...filteredVehicles].sort((a,b) => (a.plate || '').localeCompare(b.plate || '')).map(v => (
+                  <div key={v.id} className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm transition-all hover:shadow-md">
                     {editingItemId === v.id ? (
-                      <div className="flex-1 flex flex-col sm:flex-row gap-2">
-                        <input 
-                          autoFocus
-                          placeholder="Patente"
-                          className="w-full sm:w-28 text-xs font-bold px-2 py-1.5 border border-indigo-300 rounded-lg focus:outline-none bg-indigo-50/30"
-                          value={editingItemValue}
-                          onChange={(e) => setEditingItemValue(e.target.value)}
-                        />
-                        <input 
-                          placeholder="Modelo / Descripción"
-                          className="flex-1 text-xs font-medium px-2 py-1.5 border border-indigo-300 rounded-lg focus:outline-none bg-indigo-50/30"
-                          value={editingItemExtra}
-                          onChange={(e) => setEditingItemExtra(e.target.value)}
-                        />
-                        <input 
-                          type="number"
-                          step="0.1"
-                          placeholder="Rend. km/L"
-                          className="w-full sm:w-28 text-xs font-mono font-bold px-2 py-1.5 border border-indigo-300 rounded-lg focus:outline-none bg-indigo-50/30"
-                          value={editingItemNominalKm}
-                          onChange={(e) => setEditingItemNominalKm(e.target.value)}
-                          onKeyDown={(e) => e.key === 'Enter' && handleUpdateVehicle(v.id, editingItemValue, editingItemExtra, editingItemNominalKm)}
-                        />
-                        <button onClick={() => handleUpdateVehicle(v.id, editingItemValue, editingItemExtra, editingItemNominalKm)} className="p-2 bg-emerald-600 text-white rounded-lg cursor-pointer flex items-center justify-center gap-1 font-bold text-xs"><Save className="w-3.5 h-3.5" /></button>
+                      <div className="flex flex-col gap-3 bg-indigo-50/40 p-3.5 rounded-xl border border-indigo-200">
+                        <span className="text-[10px] font-black uppercase text-indigo-700 tracking-wider">
+                          Editando Vehículo: {v.plate}
+                        </span>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                          <div>
+                            <label className="text-[9px] font-extrabold text-slate-400 uppercase block mb-0.5">Patente</label>
+                            <input 
+                              type="text"
+                              className="w-full text-xs font-bold font-mono px-2.5 py-1.5 border border-indigo-300 rounded-lg focus:outline-none bg-white uppercase"
+                              value={editingItemValue}
+                              onChange={(e) => setEditingItemValue(e.target.value)}
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[9px] font-extrabold text-slate-400 uppercase block mb-0.5">Modelo / Marca</label>
+                            <input 
+                              type="text"
+                              className="w-full text-xs font-medium px-2.5 py-1.5 border border-indigo-300 rounded-lg focus:outline-none bg-white"
+                              value={editingItemExtra}
+                              onChange={(e) => setEditingItemExtra(e.target.value)}
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[9px] font-extrabold text-slate-400 uppercase block mb-0.5">Rend. (km/L)</label>
+                            <input 
+                              type="number"
+                              step="0.1"
+                              className="w-full text-xs font-mono font-bold px-2.5 py-1.5 border border-indigo-300 rounded-lg focus:outline-none bg-white"
+                              value={editingItemNominalKm}
+                              onChange={(e) => setEditingItemNominalKm(e.target.value)}
+                            />
+                          </div>
+
+                          <div>
+                            <label className="text-[9px] font-extrabold text-slate-400 uppercase block mb-0.5">Año</label>
+                            <input 
+                              type="number"
+                              className="w-full text-xs font-mono font-bold px-2.5 py-1.5 border border-indigo-300 rounded-lg focus:outline-none bg-white"
+                              value={editingVehicleYear}
+                              onChange={(e) => setEditingVehicleYear(e.target.value)}
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[9px] font-extrabold text-slate-400 uppercase block mb-0.5">Combustible</label>
+                            <select 
+                              className="w-full text-xs font-bold px-2.5 py-1.5 border border-indigo-300 rounded-lg focus:outline-none bg-white cursor-pointer"
+                              value={editingVehicleFuelType}
+                              onChange={(e) => setEditingVehicleFuelType(e.target.value)}
+                            >
+                              <option value="Diésel">Diésel</option>
+                              <option value="Bencina 93">Bencina 93</option>
+                              <option value="Bencina 95">Bencina 95</option>
+                              <option value="Bencina 97">Bencina 97</option>
+                              <option value="Gas / GLP">Gas / GLP</option>
+                              <option value="Eléctrico">Eléctrico</option>
+                              <option value="Híbrido">Híbrido</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="text-[9px] font-extrabold text-slate-400 uppercase block mb-0.5">Capacidad Carga</label>
+                            <input 
+                              type="text"
+                              className="w-full text-xs font-bold px-2.5 py-1.5 border border-indigo-300 rounded-lg focus:outline-none bg-white"
+                              value={editingVehicleLoadCapacity}
+                              onChange={(e) => setEditingVehicleLoadCapacity(e.target.value)}
+                            />
+                          </div>
+
+                          <div>
+                            <label className="text-[9px] font-extrabold text-slate-400 uppercase block mb-0.5">N° Motor</label>
+                            <input 
+                              type="text"
+                              className="w-full text-xs font-mono font-bold px-2.5 py-1.5 border border-indigo-300 rounded-lg focus:outline-none bg-white"
+                              value={editingVehicleEngineNumber}
+                              onChange={(e) => setEditingVehicleEngineNumber(e.target.value)}
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[9px] font-extrabold text-slate-400 uppercase block mb-0.5">N° Chasis</label>
+                            <input 
+                              type="text"
+                              className="w-full text-xs font-mono font-bold px-2.5 py-1.5 border border-indigo-300 rounded-lg focus:outline-none bg-white"
+                              value={editingVehicleChassisNumber}
+                              onChange={(e) => setEditingVehicleChassisNumber(e.target.value)}
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[9px] font-extrabold text-slate-400 uppercase block mb-0.5">RUT Facturación</label>
+                            <input 
+                              type="text"
+                              className="w-full text-xs font-mono font-bold px-2.5 py-1.5 border border-indigo-300 rounded-lg focus:outline-none bg-white"
+                              value={editingVehicleBillingRut}
+                              onChange={(e) => setEditingVehicleBillingRut(e.target.value)}
+                            />
+                          </div>
+
+                          <div>
+                            <label className="text-[9px] font-extrabold text-slate-400 uppercase block mb-0.5">Próx. Mantención (KM)</label>
+                            <input 
+                              type="number"
+                              placeholder="Ej: 150000"
+                              className="w-full text-xs font-mono font-bold px-2.5 py-1.5 border border-indigo-300 rounded-lg focus:outline-none bg-white"
+                              value={editingVehicleLastMaintenanceDate}
+                              onChange={(e) => setEditingVehicleLastMaintenanceDate(e.target.value)}
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[9px] font-extrabold text-slate-400 uppercase block mb-0.5">Revisión Técnica</label>
+                            <input 
+                              type="date"
+                              className="w-full text-xs font-bold px-2.5 py-1.5 border border-indigo-300 rounded-lg focus:outline-none bg-white"
+                              value={editingVehicleTechnicalInspectionDate}
+                              onChange={(e) => setEditingVehicleTechnicalInspectionDate(e.target.value)}
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[9px] font-extrabold text-slate-400 uppercase block mb-0.5">Fecha Gases</label>
+                            <input 
+                              type="date"
+                              className="w-full text-xs font-bold px-2.5 py-1.5 border border-indigo-300 rounded-lg focus:outline-none bg-white"
+                              value={editingVehicleEmissionsInspectionDate}
+                              onChange={(e) => setEditingVehicleEmissionsInspectionDate(e.target.value)}
+                            />
+                          </div>
+                        </div>
+
+                        <div className="flex justify-end gap-2 mt-2">
+                          <button 
+                            type="button"
+                            onClick={() => setEditingItemId(null)}
+                            className="px-3.5 py-1.5 text-xs font-bold text-slate-500 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer"
+                          >
+                            Cancelar
+                          </button>
+                          <button 
+                            type="button"
+                            onClick={() => handleUpdateVehicle(v.id)}
+                            className="px-4 py-1.5 text-xs font-bold bg-indigo-600 text-white rounded-xl hover:bg-indigo-500 transition-colors cursor-pointer flex items-center gap-1.5 shadow-sm"
+                          >
+                            <Save className="w-4 h-4" />
+                            <span>Guardar Cambios</span>
+                          </button>
+                        </div>
                       </div>
                     ) : (
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 bg-amber-50 rounded-lg flex items-center justify-center text-amber-500 shrink-0"><Truck className="w-4 h-4" /></div>
-                        <div className="flex flex-col">
-                          <div className="flex items-center gap-2">
-                            <span className="font-bold text-slate-800 text-xs font-mono">{v.plate}</span>
-                            {v.nominalKmPerLiter !== undefined && v.nominalKmPerLiter > 0 ? (
-                              <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-md text-[10px] font-mono font-bold">
-                                {v.nominalKmPerLiter} km/L
-                              </span>
-                            ) : (
-                              <span className="bg-slate-100 text-slate-400 px-1.5 py-0.5 rounded text-[9px] font-mono">
-                                Sin Rend.
-                              </span>
-                            )}
+                      <div className="flex flex-col gap-2.5">
+                        {/* Header Row */}
+                        <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-8 h-8 bg-amber-50 rounded-lg flex items-center justify-center text-amber-500 shrink-0">
+                              <Truck className="w-4 h-4" />
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono font-black text-slate-900 text-sm">{v.plate}</span>
+                              <span className="text-xs font-bold text-slate-600">{v.description || 'Sin modelo'}</span>
+                              {v.year && (
+                                <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md text-[10px] font-mono font-bold">
+                                  {v.year}
+                                </span>
+                              )}
+                            </div>
                           </div>
-                          <span className="text-[10px] text-slate-400 font-medium">{v.description || 'Sin modelo especificado'}</span>
+
+                          <div className="flex items-center gap-1">
+                            <button 
+                              onClick={() => { 
+                                setEditingItemId(v.id); 
+                                setEditingItemValue(v.plate || ''); 
+                                setEditingItemExtra(v.description || ''); 
+                                setEditingItemNominalKm(v.nominalKmPerLiter ? String(v.nominalKmPerLiter) : '');
+                                setEditingVehicleYear(v.year ? String(v.year) : '');
+                                setEditingVehicleFuelType(v.fuelType || 'Diésel');
+                                setEditingVehicleLoadCapacity(v.loadCapacity || '');
+                                setEditingVehicleEngineNumber(v.engineNumber || '');
+                                setEditingVehicleChassisNumber(v.chassisNumber || '');
+                                setEditingVehicleLastMaintenanceDate(v.lastMaintenanceDate || '');
+                                setEditingVehicleTechnicalInspectionDate(v.technicalInspectionDate || '');
+                                setEditingVehicleEmissionsInspectionDate(v.emissionsInspectionDate || '');
+                                setEditingVehicleBillingRut(v.billingRut || '');
+                              }} 
+                              className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer"
+                              title="Editar Vehículo"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                            <button 
+                              onClick={() => handleDeleteVehicle(v.id)} 
+                              className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                              title="Eliminar Vehículo"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Details Badges Grid */}
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[10px]">
+                          <div className="bg-slate-50 p-2 rounded-lg border border-slate-100">
+                            <span className="text-slate-400 uppercase block font-extrabold text-[9px]">Rendimiento</span>
+                            <span className="font-mono font-black text-emerald-700">
+                              {v.nominalKmPerLiter && v.nominalKmPerLiter > 0 ? `${v.nominalKmPerLiter} km/L` : 'Sin registrar'}
+                            </span>
+                          </div>
+
+                          <div className="bg-slate-50 p-2 rounded-lg border border-slate-100">
+                            <span className="text-slate-400 uppercase block font-extrabold text-[9px]">Combustible</span>
+                            <span className="font-bold text-slate-700">
+                              {v.fuelType || 'Sin registrar'}
+                            </span>
+                          </div>
+
+                          <div className="bg-slate-50 p-2 rounded-lg border border-slate-100">
+                            <span className="text-slate-400 uppercase block font-extrabold text-[9px]">Cap. Carga</span>
+                            <span className="font-bold text-slate-700">
+                              {v.loadCapacity || 'Sin registrar'}
+                            </span>
+                          </div>
+
+                          <div className="bg-slate-50 p-2 rounded-lg border border-slate-100">
+                            <span className="text-slate-400 uppercase block font-extrabold text-[9px]">RUT Facturación</span>
+                            <span className="font-mono font-bold text-slate-700">
+                              {v.billingRut || 'Sin registrar'}
+                            </span>
+                          </div>
+
+                          <div className="bg-slate-50 p-2 rounded-lg border border-slate-100">
+                            <span className="text-slate-400 uppercase block font-extrabold text-[9px]">N° Motor</span>
+                            <span className="font-mono font-bold text-slate-700 truncate block">
+                              {v.engineNumber || 'Sin registrar'}
+                            </span>
+                          </div>
+
+                          <div className="bg-slate-50 p-2 rounded-lg border border-slate-100">
+                            <span className="text-slate-400 uppercase block font-extrabold text-[9px]">N° Chasis</span>
+                            <span className="font-mono font-bold text-slate-700 truncate block">
+                              {v.chassisNumber || 'Sin registrar'}
+                            </span>
+                          </div>
+
+                          <div className="bg-slate-50 p-2 rounded-lg border border-slate-100">
+                            <span className="text-slate-400 uppercase block font-extrabold text-[9px]">Próx. Mantención</span>
+                            <span className="font-mono font-bold text-slate-700">
+                              {v.lastMaintenanceDate 
+                                ? (!isNaN(Number(v.lastMaintenanceDate)) && v.lastMaintenanceDate !== ''
+                                    ? `${Number(v.lastMaintenanceDate).toLocaleString('es-CL')} KM`
+                                    : v.lastMaintenanceDate)
+                                : 'Sin registrar'}
+                            </span>
+                          </div>
+
+                          <div className="bg-slate-50 p-2 rounded-lg border border-slate-100">
+                            <span className="text-slate-400 uppercase block font-extrabold text-[9px]">Rev. Técnica / Gases</span>
+                            <span className="font-mono font-bold text-slate-700 text-[9px] block truncate">
+                              RT: {v.technicalInspectionDate ? new Date(v.technicalInspectionDate + 'T12:00:00').toLocaleDateString('es-CL') : '-'}
+                              {' | '}
+                              Gas: {v.emissionsInspectionDate ? new Date(v.emissionsInspectionDate + 'T12:00:00').toLocaleDateString('es-CL') : '-'}
+                            </span>
+                          </div>
                         </div>
                       </div>
                     )}
-                    <div className="flex gap-1 ml-4 opacity-50 group-hover:opacity-100 transition-opacity">
-                      <button 
-                        onClick={() => { 
-                          setEditingItemId(v.id); 
-                          setEditingItemValue(v.plate || ''); 
-                          setEditingItemExtra(v.description || ''); 
-                          setEditingItemNominalKm(v.nominalKmPerLiter ? String(v.nominalKmPerLiter) : '');
-                        }} 
-                        className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer"
-                        title="Editar"
-                      ><Edit2 className="w-3.5 h-3.5" /></button>
-                      <button 
-                        onClick={() => handleDeleteVehicle(v.id)} 
-                        className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
-                        title="Eliminar"
-                      ><Trash2 className="w-3.5 h-3.5" /></button>
-                    </div>
                   </div>
                 ))}
               </div>
@@ -727,7 +1312,7 @@ export default function ParametersModal({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {[...vehicles]
+                    {[...filteredVehicles]
                       .sort((a,b) => (a.plate || '').localeCompare(b.plate || ''))
                       .map(v => {
                         const plate = v.plate;

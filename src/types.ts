@@ -38,6 +38,15 @@ export interface LogisticsVehicle {
   plate: string;
   description: string;
   nominalKmPerLiter?: number;
+  year?: number | string;
+  fuelType?: string;
+  loadCapacity?: string;
+  engineNumber?: string;
+  chassisNumber?: string;
+  lastMaintenanceDate?: string;
+  technicalInspectionDate?: string;
+  emissionsInspectionDate?: string;
+  billingRut?: string;
   createdAt?: any;
 }
 

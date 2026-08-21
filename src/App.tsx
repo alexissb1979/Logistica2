@@ -3,7 +3,7 @@ import {
   Upload, FileText, Search, Save, Calendar as CalendarIcon, MapPin, 
   Info, Trash2, Edit2, Truck, User, List, ArrowUp, ArrowDown, 
   ClipboardList, Printer, AlertCircle, AlertTriangle, RotateCcw, Lock, LogOut, Users, Shield, Loader, X, Plus, BarChart3,
-  ExternalLink, Menu, ChevronDown, ChevronUp, Clock, DollarSign, Coins
+  ExternalLink, Menu, ChevronDown, ChevronUp, Clock, DollarSign, Coins, Gauge
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import Calendar from 'react-calendar';
@@ -37,6 +37,7 @@ import { KPIDashboard } from './components/KPIDashboard';
 import { LogisticsRequestsManager } from './components/LogisticsRequestsManager';
 import { LogisticsRequestAlarmModal } from './components/LogisticsRequestAlarmModal';
 import { RouteExpensesModal } from './components/RouteExpensesModal';
+import { AdminMileageModal } from './components/AdminMileageModal';
 import logoAntko from './assets/images/logo_antko.png';
 
 const formatCLP = (num: number) => {
@@ -311,6 +312,7 @@ export default function App() {
   const [resumenSearch, setResumenSearch] = useState('');
   const [resumenDate, setResumenDate] = useState('');
   const [showExpensesManifestId, setShowExpensesManifestId] = useState<string | null>(null);
+  const [showAdminMileageModalId, setShowAdminMileageModalId] = useState<string | null>(null);
   const [resumenFilterIncompleteProgress, setResumenFilterIncompleteProgress] = useState(false);
   const [resumenFilterIncompleteMileage, setResumenFilterIncompleteMileage] = useState(false);
   const [resumenFiltersCollapsed, setResumenFiltersCollapsed] = useState(true);
@@ -1529,7 +1531,7 @@ export default function App() {
   };
 
   const handleUpdateManifestFields = async (manifestId: string, updates: Record<string, any>) => {
-    if (!userProfile?.permissions.canEditManifests) {
+    if (!userProfile?.permissions.canEditManifests && userProfile?.role !== 'ADMIN') {
       alert("No tienes permiso de 'Modificar Entregas' en tu perfil.");
       return;
     }
@@ -2543,6 +2545,23 @@ export default function App() {
             onSave={(expenses) => {
               handleUpdateManifestField(showExpensesManifestId, 'expenses', expenses);
               showToast("Gastos Guardados", "Los gastos de la ruta se han guardado de manera exitosa.", 'success');
+            }}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showAdminMileageModalId && manifests[showAdminMileageModalId] && (
+          <AdminMileageModal
+            isOpen={!!showAdminMileageModalId}
+            onClose={() => setShowAdminMileageModalId(null)}
+            manifest={manifests[showAdminMileageModalId]}
+            routeName={routeMap[manifests[showAdminMileageModalId]?.routeId || ''] || 'Sin ruta'}
+            driverName={driverMap[manifests[showAdminMileageModalId]?.driverId || ''] || 'No asignado'}
+            vehiclePlate={vehicleMap[manifests[showAdminMileageModalId]?.vehicleId || ''] || 'No asignado'}
+            onSave={async (mId, initialKm, finalKm) => {
+              await handleUpdateManifestFields(mId, { initialKm, finalKm });
+              showToast("Kilometraje Actualizado", "El registro de kilometraje ha sido modificado con éxito.", "success");
             }}
           />
         )}
@@ -5215,6 +5234,16 @@ export default function App() {
                                     value={manifest.finalKm ?? ''}
                                     onChange={(e) => handleUpdateManifestField(mId, 'finalKm', e.target.value === '' ? null : Number(e.target.value))}
                                   />
+                                  {userProfile?.role === 'ADMIN' && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setShowAdminMileageModalId(mId)}
+                                      className="p-1 text-amber-600 hover:text-amber-700 hover:bg-amber-50 rounded transition-colors cursor-pointer"
+                                      title="Modificar Kilometraje (Admin)"
+                                    >
+                                      <Gauge className="w-3.5 h-3.5" />
+                                    </button>
+                                  )}
                                 </div>
                               </td>
                               <td className="px-4 py-4 text-center">
@@ -5298,6 +5327,16 @@ export default function App() {
                                   >
                                     <DollarSign className="w-4 h-4" />
                                   </button>
+                                  {userProfile?.role === 'ADMIN' && (
+                                    <button 
+                                      type="button"
+                                      onClick={() => setShowAdminMileageModalId(mId)}
+                                      className="p-2 text-amber-600 hover:text-amber-700 hover:bg-amber-50 rounded-lg transition-all cursor-pointer"
+                                      title="Modificar Kilometraje (Solo Admin)"
+                                    >
+                                      <Gauge className="w-4 h-4" />
+                                    </button>
+                                  )}
                                   <button 
                                     type="button"
                                     onClick={() => handlePrintFinalizedReport(manifest)}
@@ -5485,9 +5524,21 @@ export default function App() {
                               </div>
 
                               <div className="bg-white p-3.5 rounded-xl border border-slate-200/60 shadow-sm">
-                                <h4 className="text-[11px] font-black text-slate-400 uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
-                                  <MapPin className="w-3.5 h-3.5 text-indigo-500" /> Registro de Kilometraje
-                                </h4>
+                                <div className="flex items-center justify-between mb-2.5">
+                                  <h4 className="text-[11px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                                    <MapPin className="w-3.5 h-3.5 text-indigo-500" /> Registro de Kilometraje
+                                  </h4>
+                                  {userProfile?.role === 'ADMIN' && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setShowAdminMileageModalId(mId)}
+                                      className="inline-flex items-center gap-1 text-[10px] font-black text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2 py-0.5 rounded-md transition-colors cursor-pointer"
+                                      title="Modificar Kilometraje como Administrador"
+                                    >
+                                      <Gauge className="w-3 h-3" /> Modificar
+                                    </button>
+                                  )}
+                                </div>
                                 <div className="grid grid-cols-2 gap-3">
                                   <div className="flex flex-col gap-1">
                                     <label className="text-[10px] font-bold text-slate-500">Kilometraje Inicial</label>
@@ -5625,6 +5676,17 @@ export default function App() {
                                 >
                                   <DollarSign className="w-4.5 h-4.5" />
                                 </button>
+
+                                {userProfile?.role === 'ADMIN' && (
+                                  <button 
+                                    type="button"
+                                    onClick={() => setShowAdminMileageModalId(mId)}
+                                    className="p-3.5 bg-amber-50 border border-amber-200 hover:bg-amber-100 text-amber-700 rounded-xl transition-all cursor-pointer shadow-sm active:scale-95 flex items-center justify-center"
+                                    title="Modificar Kilometraje (Solo Admin)"
+                                  >
+                                    <Gauge className="w-4.5 h-4.5" />
+                                  </button>
+                                )}
 
                                 <button 
                                   type="button"
