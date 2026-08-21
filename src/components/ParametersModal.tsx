@@ -417,7 +417,7 @@ export default function ParametersModal({
         initial={{ scale: 0.95, opacity: 0, y: 20 }}
         animate={{ scale: 1, opacity: 1, y: 0 }}
         exit={{ scale: 0.95, opacity: 0, y: 20 }}
-        className={`relative w-full ${paramsTab === 'fuelCosts' ? 'max-w-5xl' : 'max-w-2xl'} bg-white rounded-2xl shadow-2xl overflow-hidden border border-slate-200 z-10 transition-all duration-300`}
+        className={`relative w-full ${paramsTab === 'vehicles' || paramsTab === 'fuelCosts' ? 'max-w-6xl w-[95vw]' : 'max-w-2xl'} bg-white rounded-2xl shadow-2xl overflow-hidden border border-slate-200 z-10 transition-all duration-300`}
         id="parameters-modal-content"
       >
         <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50">
@@ -985,281 +985,286 @@ export default function ParametersModal({
                 </div>
               )}
 
-              {/* Lista de Vehículos Existentes */}
-              <div className="flex flex-col gap-3">
-                {filteredVehicles.length === 0 && (
-                  <div className="py-8 text-center text-slate-400 text-xs font-semibold bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
-                    No se encontraron vehículos que coincidan con "{searchTerm}".
-                  </div>
-                )}
-                {[...filteredVehicles].sort((a,b) => (a.plate || '').localeCompare(b.plate || '')).map(v => (
-                  <div key={v.id} className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm transition-all hover:shadow-md">
-                    {editingItemId === v.id ? (
-                      <div className="flex flex-col gap-3 bg-indigo-50/40 p-3.5 rounded-xl border border-indigo-200">
-                        <span className="text-[10px] font-black uppercase text-indigo-700 tracking-wider">
-                          Editando Vehículo: {v.plate}
-                        </span>
+              {/* Lista de Vehículos Existentes en formato Tabular */}
+              <div className="overflow-x-auto rounded-2xl border border-slate-200/90 shadow-sm bg-white">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-slate-100/80 border-b border-slate-200 text-[9.5px] font-black uppercase text-slate-500 tracking-tight">
+                      <th className="py-2.5 px-2">Patente</th>
+                      <th className="py-2.5 px-2">Modelo / Marca</th>
+                      <th className="py-2.5 px-1 text-center">Año</th>
+                      <th className="py-2.5 px-2">Combustible</th>
+                      <th className="py-2.5 px-2 text-right">Rend.</th>
+                      <th className="py-2.5 px-2">Cap. Carga</th>
+                      <th className="py-2.5 px-2">RUT Fact.</th>
+                      <th className="py-2.5 px-2">N° Motor</th>
+                      <th className="py-2.5 px-2">N° Chasis</th>
+                      <th className="py-2.5 px-2">Próx. Mant.</th>
+                      <th className="py-2.5 px-2">Rev. Téc. / Gases</th>
+                      <th className="py-2.5 px-1.5 text-center">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-[11px]">
+                    {filteredVehicles.length === 0 && (
+                      <tr>
+                        <td colSpan={12} className="py-8 text-center text-slate-400 text-xs font-semibold bg-slate-50/50">
+                          {searchTerm ? `No se encontraron vehículos que coincidan con "${searchTerm}".` : 'No hay vehículos registrados.'}
+                        </td>
+                      </tr>
+                    )}
+                    {[...filteredVehicles]
+                      .sort((a,b) => (a.plate || '').localeCompare(b.plate || ''))
+                      .map(v => {
+                        if (editingItemId === v.id) {
+                          return (
+                            <tr key={v.id} className="bg-indigo-50/60 border-y-2 border-indigo-200">
+                              <td colSpan={12} className="p-4">
+                                <div className="flex flex-col gap-3">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-[10px] font-black uppercase text-indigo-700 tracking-wider">
+                                      Editando Vehículo: <span className="font-mono text-xs">{v.plate}</span>
+                                    </span>
+                                  </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                          <div>
-                            <label className="text-[9px] font-extrabold text-slate-400 uppercase block mb-0.5">Patente</label>
-                            <input 
-                              type="text"
-                              className="w-full text-xs font-bold font-mono px-2.5 py-1.5 border border-indigo-300 rounded-lg focus:outline-none bg-white uppercase"
-                              value={editingItemValue}
-                              onChange={(e) => setEditingItemValue(e.target.value)}
-                            />
-                          </div>
-                          <div>
-                            <label className="text-[9px] font-extrabold text-slate-400 uppercase block mb-0.5">Modelo / Marca</label>
-                            <input 
-                              type="text"
-                              className="w-full text-xs font-medium px-2.5 py-1.5 border border-indigo-300 rounded-lg focus:outline-none bg-white"
-                              value={editingItemExtra}
-                              onChange={(e) => setEditingItemExtra(e.target.value)}
-                            />
-                          </div>
-                          <div>
-                            <label className="text-[9px] font-extrabold text-slate-400 uppercase block mb-0.5">Rend. (km/L)</label>
-                            <input 
-                              type="number"
-                              step="0.1"
-                              className="w-full text-xs font-mono font-bold px-2.5 py-1.5 border border-indigo-300 rounded-lg focus:outline-none bg-white"
-                              value={editingItemNominalKm}
-                              onChange={(e) => setEditingItemNominalKm(e.target.value)}
-                            />
-                          </div>
+                                  <div className="grid grid-cols-1 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
+                                    <div>
+                                      <label className="text-[9px] font-extrabold text-slate-400 uppercase block mb-0.5">Patente</label>
+                                      <input 
+                                        type="text"
+                                        className="w-full text-xs font-bold font-mono px-2.5 py-1.5 border border-indigo-300 rounded-lg focus:outline-none bg-white uppercase"
+                                        value={editingItemValue}
+                                        onChange={(e) => setEditingItemValue(e.target.value)}
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="text-[9px] font-extrabold text-slate-400 uppercase block mb-0.5">Modelo / Marca</label>
+                                      <input 
+                                        type="text"
+                                        className="w-full text-xs font-medium px-2.5 py-1.5 border border-indigo-300 rounded-lg focus:outline-none bg-white"
+                                        value={editingItemExtra}
+                                        onChange={(e) => setEditingItemExtra(e.target.value)}
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="text-[9px] font-extrabold text-slate-400 uppercase block mb-0.5">Rend. (km/L)</label>
+                                      <input 
+                                        type="number"
+                                        step="0.1"
+                                        className="w-full text-xs font-mono font-bold px-2.5 py-1.5 border border-indigo-300 rounded-lg focus:outline-none bg-white"
+                                        value={editingItemNominalKm}
+                                        onChange={(e) => setEditingItemNominalKm(e.target.value)}
+                                      />
+                                    </div>
 
-                          <div>
-                            <label className="text-[9px] font-extrabold text-slate-400 uppercase block mb-0.5">Año</label>
-                            <input 
-                              type="number"
-                              className="w-full text-xs font-mono font-bold px-2.5 py-1.5 border border-indigo-300 rounded-lg focus:outline-none bg-white"
-                              value={editingVehicleYear}
-                              onChange={(e) => setEditingVehicleYear(e.target.value)}
-                            />
-                          </div>
-                          <div>
-                            <label className="text-[9px] font-extrabold text-slate-400 uppercase block mb-0.5">Combustible</label>
-                            <select 
-                              className="w-full text-xs font-bold px-2.5 py-1.5 border border-indigo-300 rounded-lg focus:outline-none bg-white cursor-pointer"
-                              value={editingVehicleFuelType}
-                              onChange={(e) => setEditingVehicleFuelType(e.target.value)}
-                            >
-                              <option value="Diésel">Diésel</option>
-                              <option value="Bencina 93">Bencina 93</option>
-                              <option value="Bencina 95">Bencina 95</option>
-                              <option value="Bencina 97">Bencina 97</option>
-                              <option value="Gas / GLP">Gas / GLP</option>
-                              <option value="Eléctrico">Eléctrico</option>
-                              <option value="Híbrido">Híbrido</option>
-                            </select>
-                          </div>
-                          <div>
-                            <label className="text-[9px] font-extrabold text-slate-400 uppercase block mb-0.5">Capacidad Carga</label>
-                            <input 
-                              type="text"
-                              className="w-full text-xs font-bold px-2.5 py-1.5 border border-indigo-300 rounded-lg focus:outline-none bg-white"
-                              value={editingVehicleLoadCapacity}
-                              onChange={(e) => setEditingVehicleLoadCapacity(e.target.value)}
-                            />
-                          </div>
+                                    <div>
+                                      <label className="text-[9px] font-extrabold text-slate-400 uppercase block mb-0.5">Año</label>
+                                      <input 
+                                        type="number"
+                                        className="w-full text-xs font-mono font-bold px-2.5 py-1.5 border border-indigo-300 rounded-lg focus:outline-none bg-white"
+                                        value={editingVehicleYear}
+                                        onChange={(e) => setEditingVehicleYear(e.target.value)}
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="text-[9px] font-extrabold text-slate-400 uppercase block mb-0.5">Combustible</label>
+                                      <select 
+                                        className="w-full text-xs font-bold px-2.5 py-1.5 border border-indigo-300 rounded-lg focus:outline-none bg-white cursor-pointer"
+                                        value={editingVehicleFuelType}
+                                        onChange={(e) => setEditingVehicleFuelType(e.target.value)}
+                                      >
+                                        <option value="Diésel">Diésel</option>
+                                        <option value="Bencina 93">Bencina 93</option>
+                                        <option value="Bencina 95">Bencina 95</option>
+                                        <option value="Bencina 97">Bencina 97</option>
+                                        <option value="Gas / GLP">Gas / GLP</option>
+                                        <option value="Eléctrico">Eléctrico</option>
+                                        <option value="Híbrido">Híbrido</option>
+                                      </select>
+                                    </div>
+                                    <div>
+                                      <label className="text-[9px] font-extrabold text-slate-400 uppercase block mb-0.5">Capacidad Carga</label>
+                                      <input 
+                                        type="text"
+                                        className="w-full text-xs font-bold px-2.5 py-1.5 border border-indigo-300 rounded-lg focus:outline-none bg-white"
+                                        value={editingVehicleLoadCapacity}
+                                        onChange={(e) => setEditingVehicleLoadCapacity(e.target.value)}
+                                      />
+                                    </div>
 
-                          <div>
-                            <label className="text-[9px] font-extrabold text-slate-400 uppercase block mb-0.5">N° Motor</label>
-                            <input 
-                              type="text"
-                              className="w-full text-xs font-mono font-bold px-2.5 py-1.5 border border-indigo-300 rounded-lg focus:outline-none bg-white"
-                              value={editingVehicleEngineNumber}
-                              onChange={(e) => setEditingVehicleEngineNumber(e.target.value)}
-                            />
-                          </div>
-                          <div>
-                            <label className="text-[9px] font-extrabold text-slate-400 uppercase block mb-0.5">N° Chasis</label>
-                            <input 
-                              type="text"
-                              className="w-full text-xs font-mono font-bold px-2.5 py-1.5 border border-indigo-300 rounded-lg focus:outline-none bg-white"
-                              value={editingVehicleChassisNumber}
-                              onChange={(e) => setEditingVehicleChassisNumber(e.target.value)}
-                            />
-                          </div>
-                          <div>
-                            <label className="text-[9px] font-extrabold text-slate-400 uppercase block mb-0.5">RUT Facturación</label>
-                            <input 
-                              type="text"
-                              className="w-full text-xs font-mono font-bold px-2.5 py-1.5 border border-indigo-300 rounded-lg focus:outline-none bg-white"
-                              value={editingVehicleBillingRut}
-                              onChange={(e) => setEditingVehicleBillingRut(e.target.value)}
-                            />
-                          </div>
+                                    <div>
+                                      <label className="text-[9px] font-extrabold text-slate-400 uppercase block mb-0.5">N° Motor</label>
+                                      <input 
+                                        type="text"
+                                        className="w-full text-xs font-mono font-bold px-2.5 py-1.5 border border-indigo-300 rounded-lg focus:outline-none bg-white"
+                                        value={editingVehicleEngineNumber}
+                                        onChange={(e) => setEditingVehicleEngineNumber(e.target.value)}
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="text-[9px] font-extrabold text-slate-400 uppercase block mb-0.5">N° Chasis</label>
+                                      <input 
+                                        type="text"
+                                        className="w-full text-xs font-mono font-bold px-2.5 py-1.5 border border-indigo-300 rounded-lg focus:outline-none bg-white"
+                                        value={editingVehicleChassisNumber}
+                                        onChange={(e) => setEditingVehicleChassisNumber(e.target.value)}
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="text-[9px] font-extrabold text-slate-400 uppercase block mb-0.5">RUT Facturación</label>
+                                      <input 
+                                        type="text"
+                                        className="w-full text-xs font-mono font-bold px-2.5 py-1.5 border border-indigo-300 rounded-lg focus:outline-none bg-white"
+                                        value={editingVehicleBillingRut}
+                                        onChange={(e) => setEditingVehicleBillingRut(e.target.value)}
+                                      />
+                                    </div>
 
-                          <div>
-                            <label className="text-[9px] font-extrabold text-slate-400 uppercase block mb-0.5">Próx. Mantención (KM)</label>
-                            <input 
-                              type="number"
-                              placeholder="Ej: 150000"
-                              className="w-full text-xs font-mono font-bold px-2.5 py-1.5 border border-indigo-300 rounded-lg focus:outline-none bg-white"
-                              value={editingVehicleLastMaintenanceDate}
-                              onChange={(e) => setEditingVehicleLastMaintenanceDate(e.target.value)}
-                            />
-                          </div>
-                          <div>
-                            <label className="text-[9px] font-extrabold text-slate-400 uppercase block mb-0.5">Revisión Técnica</label>
-                            <input 
-                              type="date"
-                              className="w-full text-xs font-bold px-2.5 py-1.5 border border-indigo-300 rounded-lg focus:outline-none bg-white"
-                              value={editingVehicleTechnicalInspectionDate}
-                              onChange={(e) => setEditingVehicleTechnicalInspectionDate(e.target.value)}
-                            />
-                          </div>
-                          <div>
-                            <label className="text-[9px] font-extrabold text-slate-400 uppercase block mb-0.5">Fecha Gases</label>
-                            <input 
-                              type="date"
-                              className="w-full text-xs font-bold px-2.5 py-1.5 border border-indigo-300 rounded-lg focus:outline-none bg-white"
-                              value={editingVehicleEmissionsInspectionDate}
-                              onChange={(e) => setEditingVehicleEmissionsInspectionDate(e.target.value)}
-                            />
-                          </div>
-                        </div>
+                                    <div>
+                                      <label className="text-[9px] font-extrabold text-slate-400 uppercase block mb-0.5">Próx. Mantención (KM)</label>
+                                      <input 
+                                        type="number"
+                                        placeholder="Ej: 150000"
+                                        className="w-full text-xs font-mono font-bold px-2.5 py-1.5 border border-indigo-300 rounded-lg focus:outline-none bg-white"
+                                        value={editingVehicleLastMaintenanceDate}
+                                        onChange={(e) => setEditingVehicleLastMaintenanceDate(e.target.value)}
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="text-[9px] font-extrabold text-slate-400 uppercase block mb-0.5">Revisión Técnica</label>
+                                      <input 
+                                        type="date"
+                                        className="w-full text-xs font-bold px-2.5 py-1.5 border border-indigo-300 rounded-lg focus:outline-none bg-white"
+                                        value={editingVehicleTechnicalInspectionDate}
+                                        onChange={(e) => setEditingVehicleTechnicalInspectionDate(e.target.value)}
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="text-[9px] font-extrabold text-slate-400 uppercase block mb-0.5">Fecha Gases</label>
+                                      <input 
+                                        type="date"
+                                        className="w-full text-xs font-bold px-2.5 py-1.5 border border-indigo-300 rounded-lg focus:outline-none bg-white"
+                                        value={editingVehicleEmissionsInspectionDate}
+                                        onChange={(e) => setEditingVehicleEmissionsInspectionDate(e.target.value)}
+                                      />
+                                    </div>
+                                  </div>
 
-                        <div className="flex justify-end gap-2 mt-2">
-                          <button 
-                            type="button"
-                            onClick={() => setEditingItemId(null)}
-                            className="px-3.5 py-1.5 text-xs font-bold text-slate-500 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer"
-                          >
-                            Cancelar
-                          </button>
-                          <button 
-                            type="button"
-                            onClick={() => handleUpdateVehicle(v.id)}
-                            className="px-4 py-1.5 text-xs font-bold bg-indigo-600 text-white rounded-xl hover:bg-indigo-500 transition-colors cursor-pointer flex items-center gap-1.5 shadow-sm"
-                          >
-                            <Save className="w-4 h-4" />
-                            <span>Guardar Cambios</span>
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="flex flex-col gap-2.5">
-                        {/* Header Row */}
-                        <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                          <div className="flex items-center gap-2.5">
-                            <div className="w-8 h-8 bg-amber-50 rounded-lg flex items-center justify-center text-amber-500 shrink-0">
-                              <Truck className="w-4 h-4" />
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <span className="font-mono font-black text-slate-900 text-sm">{v.plate}</span>
-                              <span className="text-xs font-bold text-slate-600">{v.description || 'Sin modelo'}</span>
-                              {v.year && (
-                                <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md text-[10px] font-mono font-bold">
+                                  <div className="flex justify-end gap-2 mt-2">
+                                    <button 
+                                      type="button"
+                                      onClick={() => setEditingItemId(null)}
+                                      className="px-3.5 py-1.5 text-xs font-bold text-slate-500 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer"
+                                    >
+                                      Cancelar
+                                    </button>
+                                    <button 
+                                      type="button"
+                                      onClick={() => handleUpdateVehicle(v.id)}
+                                      className="px-4 py-1.5 text-xs font-bold bg-indigo-600 text-white rounded-xl hover:bg-indigo-500 transition-colors cursor-pointer flex items-center gap-1.5 shadow-sm"
+                                    >
+                                      <Save className="w-4 h-4" />
+                                      <span>Guardar Cambios</span>
+                                    </button>
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        }
+
+                        return (
+                          <tr key={v.id} className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors">
+                            <td className="py-2 px-2 whitespace-nowrap">
+                              <span className="font-mono font-black text-slate-900 bg-amber-100/80 text-amber-950 px-1.5 py-0.5 rounded border border-amber-200/80 text-[11px]">
+                                {v.plate}
+                              </span>
+                            </td>
+                            <td className="py-2 px-2 font-semibold text-slate-800 whitespace-nowrap max-w-[120px] truncate" title={v.description}>
+                              {v.description || <span className="text-slate-300 font-normal">-</span>}
+                            </td>
+                            <td className="py-2 px-1 text-center font-mono font-bold text-slate-600 whitespace-nowrap">
+                              {v.year ? (
+                                <span className="bg-slate-100 text-slate-700 px-1 py-0.5 rounded text-[10px]">
                                   {v.year}
                                 </span>
+                              ) : (
+                                <span className="text-slate-300 font-normal">-</span>
                               )}
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-1">
-                            <button 
-                              onClick={() => { 
-                                setEditingItemId(v.id); 
-                                setEditingItemValue(v.plate || ''); 
-                                setEditingItemExtra(v.description || ''); 
-                                setEditingItemNominalKm(v.nominalKmPerLiter ? String(v.nominalKmPerLiter) : '');
-                                setEditingVehicleYear(v.year ? String(v.year) : '');
-                                setEditingVehicleFuelType(v.fuelType || 'Diésel');
-                                setEditingVehicleLoadCapacity(v.loadCapacity || '');
-                                setEditingVehicleEngineNumber(v.engineNumber || '');
-                                setEditingVehicleChassisNumber(v.chassisNumber || '');
-                                setEditingVehicleLastMaintenanceDate(v.lastMaintenanceDate || '');
-                                setEditingVehicleTechnicalInspectionDate(v.technicalInspectionDate || '');
-                                setEditingVehicleEmissionsInspectionDate(v.emissionsInspectionDate || '');
-                                setEditingVehicleBillingRut(v.billingRut || '');
-                              }} 
-                              className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer"
-                              title="Editar Vehículo"
-                            >
-                              <Edit2 className="w-4 h-4" />
-                            </button>
-                            <button 
-                              onClick={() => handleDeleteVehicle(v.id)} 
-                              className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                              title="Eliminar Vehículo"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Details Badges Grid */}
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[10px]">
-                          <div className="bg-slate-50 p-2 rounded-lg border border-slate-100">
-                            <span className="text-slate-400 uppercase block font-extrabold text-[9px]">Rendimiento</span>
-                            <span className="font-mono font-black text-emerald-700">
-                              {v.nominalKmPerLiter && v.nominalKmPerLiter > 0 ? `${v.nominalKmPerLiter} km/L` : 'Sin registrar'}
-                            </span>
-                          </div>
-
-                          <div className="bg-slate-50 p-2 rounded-lg border border-slate-100">
-                            <span className="text-slate-400 uppercase block font-extrabold text-[9px]">Combustible</span>
-                            <span className="font-bold text-slate-700">
-                              {v.fuelType || 'Sin registrar'}
-                            </span>
-                          </div>
-
-                          <div className="bg-slate-50 p-2 rounded-lg border border-slate-100">
-                            <span className="text-slate-400 uppercase block font-extrabold text-[9px]">Cap. Carga</span>
-                            <span className="font-bold text-slate-700">
-                              {v.loadCapacity || 'Sin registrar'}
-                            </span>
-                          </div>
-
-                          <div className="bg-slate-50 p-2 rounded-lg border border-slate-100">
-                            <span className="text-slate-400 uppercase block font-extrabold text-[9px]">RUT Facturación</span>
-                            <span className="font-mono font-bold text-slate-700">
-                              {v.billingRut || 'Sin registrar'}
-                            </span>
-                          </div>
-
-                          <div className="bg-slate-50 p-2 rounded-lg border border-slate-100">
-                            <span className="text-slate-400 uppercase block font-extrabold text-[9px]">N° Motor</span>
-                            <span className="font-mono font-bold text-slate-700 truncate block">
-                              {v.engineNumber || 'Sin registrar'}
-                            </span>
-                          </div>
-
-                          <div className="bg-slate-50 p-2 rounded-lg border border-slate-100">
-                            <span className="text-slate-400 uppercase block font-extrabold text-[9px]">N° Chasis</span>
-                            <span className="font-mono font-bold text-slate-700 truncate block">
-                              {v.chassisNumber || 'Sin registrar'}
-                            </span>
-                          </div>
-
-                          <div className="bg-slate-50 p-2 rounded-lg border border-slate-100">
-                            <span className="text-slate-400 uppercase block font-extrabold text-[9px]">Próx. Mantención</span>
-                            <span className="font-mono font-bold text-slate-700">
-                              {v.lastMaintenanceDate 
-                                ? (!isNaN(Number(v.lastMaintenanceDate)) && v.lastMaintenanceDate !== ''
-                                    ? `${Number(v.lastMaintenanceDate).toLocaleString('es-CL')} KM`
-                                    : v.lastMaintenanceDate)
-                                : 'Sin registrar'}
-                            </span>
-                          </div>
-
-                          <div className="bg-slate-50 p-2 rounded-lg border border-slate-100">
-                            <span className="text-slate-400 uppercase block font-extrabold text-[9px]">Rev. Técnica / Gases</span>
-                            <span className="font-mono font-bold text-slate-700 text-[9px] block truncate">
-                              RT: {v.technicalInspectionDate ? new Date(v.technicalInspectionDate + 'T12:00:00').toLocaleDateString('es-CL') : '-'}
-                              {' | '}
-                              Gas: {v.emissionsInspectionDate ? new Date(v.emissionsInspectionDate + 'T12:00:00').toLocaleDateString('es-CL') : '-'}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ))}
+                            </td>
+                            <td className="py-2 px-2 font-medium text-slate-700 whitespace-nowrap text-[11px]">
+                              {v.fuelType || <span className="text-slate-300 font-normal">-</span>}
+                            </td>
+                            <td className="py-2 px-2 text-right font-mono font-black text-emerald-700 whitespace-nowrap text-[11px]">
+                              {v.nominalKmPerLiter && v.nominalKmPerLiter > 0 ? (
+                                <span>{v.nominalKmPerLiter} <span className="text-[9.5px] font-normal text-emerald-600">km/L</span></span>
+                              ) : (
+                                <span className="text-slate-300 font-normal">-</span>
+                              )}
+                            </td>
+                            <td className="py-2 px-2 text-slate-700 whitespace-nowrap text-[11px]">
+                              {v.loadCapacity || <span className="text-slate-300 font-normal">-</span>}
+                            </td>
+                            <td className="py-2 px-2 font-mono text-slate-700 text-[10.5px] whitespace-nowrap">
+                              {v.billingRut || <span className="text-slate-300 font-normal">-</span>}
+                            </td>
+                            <td className="py-2 px-2 font-mono text-slate-600 text-[10.5px] whitespace-nowrap max-w-[90px] truncate" title={v.engineNumber}>
+                              {v.engineNumber || <span className="text-slate-300 font-normal">-</span>}
+                            </td>
+                            <td className="py-2 px-2 font-mono text-slate-600 text-[10.5px] whitespace-nowrap max-w-[90px] truncate" title={v.chassisNumber}>
+                              {v.chassisNumber || <span className="text-slate-300 font-normal">-</span>}
+                            </td>
+                            <td className="py-2 px-2 font-mono font-bold text-slate-700 whitespace-nowrap text-[10.5px]">
+                              {v.lastMaintenanceDate ? (
+                                !isNaN(Number(v.lastMaintenanceDate)) && v.lastMaintenanceDate !== '' ? (
+                                  `${Number(v.lastMaintenanceDate).toLocaleString('es-CL')} KM`
+                                ) : (
+                                  v.lastMaintenanceDate
+                                )
+                              ) : (
+                                <span className="text-slate-300 font-normal">-</span>
+                              )}
+                            </td>
+                            <td className="py-2 px-2 font-mono text-[9.5px] text-slate-600 whitespace-nowrap leading-tight">
+                              <div><span className="text-slate-400 font-semibold">RT:</span> {v.technicalInspectionDate ? new Date(v.technicalInspectionDate + 'T12:00:00').toLocaleDateString('es-CL') : '-'}</div>
+                              <div><span className="text-slate-400 font-semibold">Gas:</span> {v.emissionsInspectionDate ? new Date(v.emissionsInspectionDate + 'T12:00:00').toLocaleDateString('es-CL') : '-'}</div>
+                            </td>
+                            <td className="py-2 px-1.5 text-center whitespace-nowrap">
+                              <div className="flex items-center justify-center gap-0.5">
+                                <button 
+                                  onClick={() => { 
+                                    setEditingItemId(v.id); 
+                                    setEditingItemValue(v.plate || ''); 
+                                    setEditingItemExtra(v.description || ''); 
+                                    setEditingItemNominalKm(v.nominalKmPerLiter ? String(v.nominalKmPerLiter) : '');
+                                    setEditingVehicleYear(v.year ? String(v.year) : '');
+                                    setEditingVehicleFuelType(v.fuelType || 'Diésel');
+                                    setEditingVehicleLoadCapacity(v.loadCapacity || '');
+                                    setEditingVehicleEngineNumber(v.engineNumber || '');
+                                    setEditingVehicleChassisNumber(v.chassisNumber || '');
+                                    setEditingVehicleLastMaintenanceDate(v.lastMaintenanceDate || '');
+                                    setEditingVehicleTechnicalInspectionDate(v.technicalInspectionDate || '');
+                                    setEditingVehicleEmissionsInspectionDate(v.emissionsInspectionDate || '');
+                                    setEditingVehicleBillingRut(v.billingRut || '');
+                                  }} 
+                                  className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer"
+                                  title="Editar Vehículo"
+                                >
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                </button>
+                                <button 
+                                  onClick={() => handleDeleteVehicle(v.id)} 
+                                  className="p-1 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                                  title="Eliminar Vehículo"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                  </tbody>
+                </table>
               </div>
             </div>
           )}
