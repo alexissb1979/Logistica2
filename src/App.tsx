@@ -3,7 +3,7 @@ import {
   Upload, FileText, Search, Save, Calendar as CalendarIcon, MapPin, 
   Info, Trash2, Edit2, Truck, User, List, ArrowUp, ArrowDown, 
   ClipboardList, Printer, AlertCircle, AlertTriangle, RotateCcw, Lock, LogOut, Users, Shield, Loader, X, Plus, BarChart3,
-  ExternalLink, Menu, ChevronDown, ChevronUp, Clock, DollarSign, Coins, Gauge
+  ExternalLink, Menu, ChevronDown, ChevronUp, Clock, DollarSign, Coins, Gauge, BellRing
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import Calendar from 'react-calendar';
@@ -38,6 +38,7 @@ import { LogisticsRequestsManager } from './components/LogisticsRequestsManager'
 import { LogisticsRequestAlarmModal } from './components/LogisticsRequestAlarmModal';
 import { RouteExpensesModal } from './components/RouteExpensesModal';
 import { AdminMileageModal } from './components/AdminMileageModal';
+import FailedPointsReassignmentModal, { FailedPointItem } from './components/FailedPointsReassignmentModal';
 import logoAntko from './assets/images/logo_antko.png';
 
 const formatCLP = (num: number) => {
@@ -143,6 +144,7 @@ export default function App() {
   const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
   const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const [isFailedPointsModalOpen, setIsFailedPointsModalOpen] = useState(false);
   
   // Modals state
   const [isConsolidatedReportModalOpen, setIsConsolidatedReportModalOpen] = useState(() => {
@@ -811,6 +813,105 @@ export default function App() {
       return matchesSearch && matchesDate && matchesProgress && matchesMileage;
     });
   }, [finalizedManifestsList, resumenSearch, resumenDate, resumenFilterIncompleteProgress, resumenFilterIncompleteMileage, routeMap, driverMap, vehicleMap]);
+
+  // Documentos con estado "NO ENTREGADO" o "NO RETIRADO" pendientes de reasignación
+  const failedPendingDocs = useMemo(() => {
+    const list: FailedPointItem[] = [];
+    const processedKeys = new Set<string>();
+
+    Object.values(manifests).forEach((m: LogisticsManifest) => {
+      if (!m.documentsSnapshot) return;
+      // Solo mostrar puntos a reasignar desde septiembre de 2026 en adelante
+      if (!m.date || m.date < '2026-09-01') return;
+
+      const originRouteName = routeMap[m.routeId || ''] || m.routeId || 'Ruta Histórica';
+
+      m.documentsSnapshot.forEach(d => {
+        const isFailed = d.trackingStatus === 'NO ENTREGADO' || d.trackingStatus === 'NO RETIRADO';
+        if (!isFailed) return;
+
+        const key = `${m.id}_${d.id}`;
+        if (processedKeys.has(key)) return;
+
+        // Verificar si el documento ya fue reasignado a una nueva ruta activa
+        const currentAsm = assignments[d.id];
+        const isReassigned = currentAsm && currentAsm.route && currentAsm.route !== 'UNASSIGNED' && (
+          (currentAsm.dispatchDate && currentAsm.dispatchDate > (m.date || '')) ||
+          (currentAsm.dispatchDate === m.date && currentAsm.route !== m.routeId)
+        );
+
+        if (!isReassigned) {
+          processedKeys.add(key);
+          list.push({
+            id: d.id,
+            tipo: (d.tipo as LogisticsDocumentType) || 'NV',
+            razonSocial: d.razonSocial || 'Sin especificar',
+            totalAmount: d.totalAmount ?? d.totalPendiente ?? 0,
+            failedReason: d.failedReason || d.trackingObservation || '',
+            trackingObservation: d.trackingObservation || '',
+            trackingStatus: d.trackingStatus,
+            originManifestId: m.id,
+            originRouteId: m.routeId || '',
+            originRouteName,
+            originDate: m.date || '',
+            originRouteNumber: m.routeNumber,
+            location: d.location || '',
+            guideNumber: d.guideNumber || '',
+            proceso: d.proceso || 'ENTREGA',
+            isAdditional: d.isAdditional
+          });
+        }
+      });
+    });
+
+    return list;
+  }, [manifests, assignments, routeMap]);
+
+  const handleReassignFailedPoints = async (items: FailedPointItem[], targetRoute: string, targetDate: string) => {
+    if (!userProfile?.permissions.canEditPlanning) {
+      showToast("Permiso Denegado", "No tienes permiso de 'Modificar Planificación' en tu perfil para reasignar puntos.", "error");
+      return;
+    }
+    if (!targetRoute || targetRoute === 'UNASSIGNED') {
+      showToast("Seleccione Ruta", "Debe seleccionar una ruta válida para reasignar los puntos.", "warning");
+      return;
+    }
+    if (!targetDate) {
+      showToast("Seleccione Fecha", "Debe seleccionar una fecha de despacho válida.", "warning");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const batch = writeBatch(db);
+
+      items.forEach(item => {
+        const assignmentRef = doc(db, "assignments", item.id);
+        const newAsm: Partial<LogisticsAssignment> = {
+          documentId: item.id,
+          route: targetRoute,
+          dispatchDate: targetDate,
+          razonSocial: item.razonSocial,
+          tipo: item.tipo,
+          totalPendiente: item.totalAmount,
+          guideNumber: item.guideNumber || '',
+          location: item.location || '',
+          logisticsNotes: `REASIGNADO (Falla previa en HR-${item.originRouteNumber || ''}: ${item.failedReason || 'No Entregado'})`,
+          isAdditional: item.isAdditional || false,
+          updatedAt: serverTimestamp()
+        };
+        batch.set(assignmentRef, newAsm, { merge: true });
+      });
+
+      await batch.commit();
+      showToast("Puntos Reasignados", `Se reasignaron ${items.length} punto(s) a la ruta ${routeMap[targetRoute] || targetRoute} para el ${targetDate}.`, "success");
+    } catch (err: any) {
+      console.error("Error reassigning failed points:", err);
+      showToast("Error", "No se pudieron reasignar los puntos: " + err.message, "error");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Auth observer and profile sync
   useEffect(() => {
@@ -4201,20 +4302,52 @@ export default function App() {
           <div className="flex-1 flex flex-col overflow-hidden bg-slate-50 animate-fade-in" id="hoja-de-ruta-panel">
             <div className="p-4 sm:p-6 bg-white border-b border-slate-200 shadow-sm flex flex-col gap-3 sm:gap-4">
               <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                  <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-4 flex-wrap">
                     <div>
                       <h2 className="text-base sm:text-lg font-bold text-slate-800 tracking-tight flex items-center gap-2">
                         <ClipboardList className="w-4 h-4 sm:w-5 sm:h-5 text-indigo-600" /> Generador de Hoja de Ruta
                       </h2>
                       <p className="text-[10px] sm:text-xs text-slate-500">Configura el orden y detalles para el transportista</p>
                     </div>
+
+                    {failedPendingDocs.length > 0 && (
+                      <button
+                        onClick={() => setIsFailedPointsModalOpen(true)}
+                        className="flex items-center gap-2.5 px-3.5 py-2 bg-gradient-to-r from-rose-600 via-red-600 to-rose-700 hover:from-rose-500 hover:to-red-500 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-rose-600/30 border-2 border-rose-300 animate-pulse active:scale-95 transition-all cursor-pointer ring-4 ring-rose-500/20 shrink-0"
+                        title="Haga clic para ver y reasignar puntos no entregados"
+                      >
+                        <div className="relative">
+                          <BellRing className="w-5 h-5 text-amber-300 animate-bounce shrink-0" />
+                          <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-amber-400 animate-ping" />
+                        </div>
+                        <div className="flex flex-col items-start text-left leading-none">
+                          <span className="text-[8px] font-black text-rose-100 tracking-widest uppercase">
+                            ALERTA REASIGNACIÓN
+                          </span>
+                          <span className="text-xs font-black text-white mt-0.5">
+                            {failedPendingDocs.length} {failedPendingDocs.length === 1 ? 'Punto No Entregado' : 'Puntos No Entregados'}
+                          </span>
+                        </div>
+                      </button>
+                    )}
                   </div>
               </div>
 
               {/* Mobile Summary & Collapse Toggle Bar */}
               <div className="md:hidden flex items-center justify-between bg-indigo-50/70 border border-indigo-100 rounded-xl p-3.5 shadow-sm">
                 <div className="flex flex-col text-left gap-1">
-                  <span className="text-[9px] font-bold text-indigo-500 uppercase tracking-widest">Configuración de Ruta</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[9px] font-bold text-indigo-500 uppercase tracking-widest">Configuración de Ruta</span>
+                    {failedPendingDocs.length > 0 && (
+                      <button 
+                        onClick={() => setIsFailedPointsModalOpen(true)}
+                        className="px-2 py-0.5 bg-rose-600 text-white font-black text-[9px] rounded-full animate-pulse flex items-center gap-1 shadow-sm cursor-pointer"
+                      >
+                        <BellRing className="w-3 h-3 text-amber-300" />
+                        <span>{failedPendingDocs.length} No Entregados</span>
+                      </button>
+                    )}
+                  </div>
                   <span className="text-xs font-black text-slate-850">
                     {routes.find(r => r.id === hrSelectedRoute)?.name || 'Sin Seleccionar'} • {hrSelectedDate ? new Date(hrSelectedDate + 'T12:00:00').toLocaleDateString('es-CL') : '-'}
                   </span>
@@ -5752,6 +5885,23 @@ export default function App() {
           />
         )}
       </div>
+
+      <AnimatePresence>
+        {isFailedPointsModalOpen && (
+          <FailedPointsReassignmentModal 
+            isOpen={isFailedPointsModalOpen}
+            onClose={() => setIsFailedPointsModalOpen(false)}
+            failedDocs={failedPendingDocs}
+            routes={routes}
+            routeMap={routeMap}
+            defaultTargetRoute={hrSelectedRoute}
+            defaultTargetDate={hrSelectedDate || new Date().toISOString().split('T')[0]}
+            onReassign={handleReassignFailedPoints}
+            formatDocId={formatDocId}
+            formatCLP={formatCLP}
+          />
+        )}
+      </AnimatePresence>
 
       <LogisticsRequestAlarmModal 
         isOpen={isAlarmOpen}
