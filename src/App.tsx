@@ -3,7 +3,7 @@ import {
   Upload, FileText, Search, Save, Calendar as CalendarIcon, MapPin, 
   Info, Trash2, Edit2, Truck, User, List, ArrowUp, ArrowDown, 
   ClipboardList, Printer, AlertCircle, AlertTriangle, RotateCcw, Lock, LogOut, Users, Shield, Loader, X, Plus, BarChart3,
-  ExternalLink, Menu, ChevronDown, ChevronUp, Clock, DollarSign, Coins, Gauge, BellRing
+  ExternalLink, Menu, ChevronDown, ChevronUp, Clock, DollarSign, Coins, Gauge, BellRing, CalendarDays
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import Calendar from 'react-calendar';
@@ -39,6 +39,7 @@ import { LogisticsRequestAlarmModal } from './components/LogisticsRequestAlarmMo
 import { RouteExpensesModal } from './components/RouteExpensesModal';
 import { AdminMileageModal } from './components/AdminMileageModal';
 import FailedPointsReassignmentModal, { FailedPointItem } from './components/FailedPointsReassignmentModal';
+import WeeklyScheduleModal from './components/WeeklyScheduleModal';
 import logoAntko from './assets/images/logo_antko.png';
 
 const formatCLP = (num: number) => {
@@ -145,6 +146,7 @@ export default function App() {
   const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [isFailedPointsModalOpen, setIsFailedPointsModalOpen] = useState(false);
+  const [isWeeklyScheduleOpen, setIsWeeklyScheduleOpen] = useState(false);
   
   // Modals state
   const [isConsolidatedReportModalOpen, setIsConsolidatedReportModalOpen] = useState(() => {
@@ -3785,11 +3787,20 @@ export default function App() {
             </button>
           </nav>
 
-          <div className="flex flex-col sm:flex-row sm:items-center gap-4 border-t border-slate-700 lg:border-t-0 pt-4 lg:pt-0">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 sm:gap-3 border-t border-slate-700 lg:border-t-0 pt-4 lg:pt-0">
+            <button 
+              onClick={() => { setIsWeeklyScheduleOpen(true); setMobileMenuOpen(false); }}
+              className="flex items-center gap-2 px-4 py-2 lg:px-3 lg:py-1.5 bg-sky-950/80 hover:bg-sky-900 text-sky-200 hover:text-white rounded-lg text-sm lg:text-xs font-bold transition-all border border-sky-700/60 cursor-pointer w-full sm:w-auto justify-center shadow-xs"
+              title="Ver Calendario Semanal de Programación de Rutas"
+            >
+              <CalendarDays className="w-4 h-4 lg:w-3.5 lg:h-3.5 text-sky-400" />
+              <span>Programación</span>
+            </button>
+
             {userProfile?.permissions.canEditParameters && (
               <button 
                 onClick={() => { setIsManagingParameters(true); setMobileMenuOpen(false); }}
-                className="flex items-center gap-2 px-4 py-2 lg:px-3 lg:py-1.5 bg-slate-800 hover:bg-slate-700 rounded-lg text-sm lg:text-xs font-bold transition-all border border-slate-700 cursor-pointer w-full sm:w-auto justify-center"
+                className="flex items-center gap-2 px-4 py-2 lg:px-3 lg:py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-lg text-sm lg:text-xs font-bold transition-all border border-slate-700 cursor-pointer w-full sm:w-auto justify-center"
               >
                 <Edit2 className="w-4 h-4 lg:w-3.5 lg:h-3.5 text-indigo-400" />
                 <span>Parámetros</span>
@@ -5922,6 +5933,12 @@ export default function App() {
       </div>
 
       <AnimatePresence>
+        {isWeeklyScheduleOpen && (
+          <WeeklyScheduleModal
+            isOpen={isWeeklyScheduleOpen}
+            onClose={() => setIsWeeklyScheduleOpen(false)}
+          />
+        )}
         {isFailedPointsModalOpen && (
           <FailedPointsReassignmentModal 
             isOpen={isFailedPointsModalOpen}
