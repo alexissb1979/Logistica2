@@ -1787,6 +1787,7 @@ export default function App() {
               <th style="border: 1px solid #cbd5e1; padding: 10px; text-align: left; font-size: 10px; font-weight: bold; color: #475569;">RAZÓN SOCIAL</th>
               <th style="border: 1px solid #cbd5e1; padding: 10px; text-align: left; font-size: 10px; font-weight: bold; color: #475569; width: 75px;">N° GUÍA</th>
               <th style="border: 1px solid #cbd5e1; padding: 10px; text-align: left; font-size: 10px; font-weight: bold; color: #475569; width: 80px;">TIPO ENTR.</th>
+              <th style="border: 1px solid #cbd5e1; padding: 10px; text-align: center; font-size: 10px; font-weight: bold; color: #475569; width: 95px;">ESTADO</th>
               <th style="border: 1px solid #cbd5e1; padding: 10px; text-align: left; font-size: 10px; font-weight: bold; color: #475569; width: 100px;">UBICACIÓN</th>
               <th style="border: 1px solid #cbd5e1; padding: 10px; text-align: left; font-size: 10px; font-weight: bold; color: #475569;">OBSERVACIONES / DESPACHO</th>
             </tr>
@@ -1801,17 +1802,51 @@ export default function App() {
               if (a.tipo === 'NV' && b.tipo === 'OC') return -1;
               if (a.tipo === 'OC' && b.tipo === 'NV') return 1;
               return a.id.localeCompare(b.id);
-            }).map((doc, idx) => `
-              <tr style="border-bottom: 1px solid #cbd5e1; background-color: ${doc.tipo === 'OC' ? '#f0fdfa' : '#ffffff'};">
-                <td style="border: 1px solid #cbd5e1; padding: 8px; text-align: center; font-size: 10px; font-weight: bold;">${idx + 1}</td>
-                <td style="border: 1px solid #cbd5e1; padding: 8px; font-size: 10px; font-family: monospace; font-weight: bold; color: ${doc.tipo === 'OC' ? '#0d9488' : '#4f46e5'};">${formatDocId(doc.tipo, doc.id)}</td>
-                <td style="border: 1px solid #cbd5e1; padding: 8px; font-size: 10px; font-weight: 500;">${doc.razonSocial}</td>
-                <td style="border: 1px solid #cbd5e1; padding: 8px; font-size: 10px;">${doc.tipo === 'OC' ? '-' : doc.guideNumber || '-'}</td>
-                <td style="border: 1px solid #cbd5e1; padding: 8px; font-size: 10px; font-weight: bold; color: ${doc.tipo === 'OC' ? '#94a3b8' : (doc.deliveryStatus === 'PARCIAL' ? '#e11d48' : '#059669')};">${doc.tipo === 'OC' ? '-' : (doc.deliveryStatus || 'COMPLETO')}</td>
-                <td style="border: 1px solid #cbd5e1; padding: 8px; font-size: 10px;">${doc.location || '-'}</td>
-                <td style="border: 1px solid #cbd5e1; padding: 8px; font-size: 10px; color: #475569;">${doc.logisticsNotes || '-'}</td>
-              </tr>
-            `).join('')}
+            }).map((doc, idx) => {
+              const trackingSt = doc.trackingStatus || 'EN CURSO';
+              let statusBadgeBg = '#f1f5f9';
+              let statusBadgeColor = '#475569';
+              let statusBorderColor = '#cbd5e1';
+
+              if (trackingSt === 'ENTREGADO') {
+                statusBadgeBg = '#dcfce7';
+                statusBadgeColor = '#15803d';
+                statusBorderColor = '#86efac';
+              } else if (trackingSt === 'RETIRADO') {
+                statusBadgeBg = '#ccfbf1';
+                statusBadgeColor = '#0f766e';
+                statusBorderColor = '#99f6e4';
+              } else if (trackingSt === 'NO ENTREGADO' || trackingSt === 'NO RETIRADO') {
+                statusBadgeBg = '#ffe4e6';
+                statusBadgeColor = '#be123c';
+                statusBorderColor = '#fecdd3';
+              } else if (trackingSt === 'EN CURSO') {
+                statusBadgeBg = '#fef3c7';
+                statusBadgeColor = '#b45309';
+                statusBorderColor = '#fde68a';
+              }
+
+              const notes = doc.logisticsNotes || '';
+              const obs = doc.trackingObservation || doc.failedReason || '';
+              const fullObs = notes && obs ? `${notes} / ${obs}` : (notes || obs || '-');
+
+              return `
+                <tr style="border-bottom: 1px solid #cbd5e1; background-color: ${doc.tipo === 'OC' ? '#f0fdfa' : '#ffffff'};">
+                  <td style="border: 1px solid #cbd5e1; padding: 8px; text-align: center; font-size: 10px; font-weight: bold;">${idx + 1}</td>
+                  <td style="border: 1px solid #cbd5e1; padding: 8px; font-size: 10px; font-family: monospace; font-weight: bold; color: ${doc.tipo === 'OC' ? '#0d9488' : '#4f46e5'};">${formatDocId(doc.tipo, doc.id)}</td>
+                  <td style="border: 1px solid #cbd5e1; padding: 8px; font-size: 10px; font-weight: 500;">${doc.razonSocial}</td>
+                  <td style="border: 1px solid #cbd5e1; padding: 8px; font-size: 10px;">${doc.tipo === 'OC' ? '-' : doc.guideNumber || '-'}</td>
+                  <td style="border: 1px solid #cbd5e1; padding: 8px; font-size: 10px; font-weight: bold; color: ${doc.tipo === 'OC' ? '#94a3b8' : (doc.deliveryStatus === 'PARCIAL' ? '#e11d48' : '#059669')};">${doc.tipo === 'OC' ? '-' : (doc.deliveryStatus || 'COMPLETO')}</td>
+                  <td style="border: 1px solid #cbd5e1; padding: 6px 8px; text-align: center;">
+                    <span style="display: inline-block; padding: 3px 6px; font-size: 9px; font-weight: 800; border-radius: 4px; background-color: ${statusBadgeBg}; color: ${statusBadgeColor}; border: 1px solid ${statusBorderColor}; text-transform: uppercase; white-space: nowrap;">
+                      ${trackingSt}
+                    </span>
+                  </td>
+                  <td style="border: 1px solid #cbd5e1; padding: 8px; font-size: 10px;">${doc.location || '-'}</td>
+                  <td style="border: 1px solid #cbd5e1; padding: 8px; font-size: 10px; color: #475569;">${fullObs}</td>
+                </tr>
+              `;
+            }).join('')}
           </tbody>
         </table>
         
