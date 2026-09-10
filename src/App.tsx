@@ -3,7 +3,7 @@ import {
   Upload, FileText, Search, Save, Calendar as CalendarIcon, MapPin, 
   Info, Trash2, Edit2, Truck, User, List, ArrowUp, ArrowDown, 
   ClipboardList, Printer, AlertCircle, AlertTriangle, RotateCcw, Lock, LogOut, Users, Shield, Loader, X, Plus, BarChart3,
-  ExternalLink, Menu, ChevronDown, ChevronUp, Clock, DollarSign, Coins, Gauge, BellRing, CalendarDays
+  ExternalLink, Menu, ChevronDown, ChevronUp, Clock, DollarSign, Coins, Gauge, BellRing, CalendarDays, Layers
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import Calendar from 'react-calendar';
@@ -341,6 +341,14 @@ export default function App() {
 
   const [hrSelectedRoute, setHrSelectedRoute] = useState<string>('');
   const [hrSelectedDate, setHrSelectedDate] = useState<string>(getLocalDateString());
+  const [hrSelectedGroup, setHrSelectedGroup] = useState<string | null>(null);
+
+  const getRouteGroup = (r: LogisticsRoute): string => {
+    if (r.group && r.group.trim()) return r.group.trim();
+    if (!r.name) return 'Sin Agrupador';
+    let cleaned = r.name.replace(/\s*[\(-]?\s*\d+\s*[\)]?\s*$/g, '').trim();
+    return cleaned || r.name.trim();
+  };
 
   const hrIsFinalized = useMemo(() => {
     const manifestId = `${hrSelectedRoute}_${hrSelectedDate}`;
@@ -357,6 +365,21 @@ export default function App() {
     });
     return map;
   }, [routes]);
+
+  const routeGroupsList = useMemo(() => {
+    const set = new Set<string>();
+    routes.forEach(r => {
+      const grp = getRouteGroup(r);
+      if (grp) set.add(grp);
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'es-CL'));
+  }, [routes]);
+
+  const filteredAvailableRoutes = useMemo(() => {
+    const sorted = [...routes].sort((a, b) => (a.name || '').localeCompare(b.name || '', 'es-CL'));
+    if (!hrSelectedGroup) return sorted;
+    return sorted.filter(r => getRouteGroup(r) === hrSelectedGroup);
+  }, [routes, hrSelectedGroup]);
 
   const driverMap = useMemo(() => {
     const map: Record<string, string> = {};
@@ -4463,53 +4486,136 @@ export default function App() {
 
               {/* Collapsible filters and controls block */}
               <div className={`flex-col gap-4 sm:gap-6 ${hrFiltersCollapsed ? 'hidden md:flex' : 'flex'}`}>
-                <div className="flex flex-col gap-3">
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Rutas Disponibles</label>
-                    <div className="flex flex-wrap gap-2">
-                      {routes.length > 0 ? (
-                        routes
-                          .sort((a,b) => (a.name || '').localeCompare(b.name || ''))
-                          .map(r => {
+                <div className="flex flex-col gap-4">
+                  {/* Agrupadores de Rutas (Filtro en Tono Rojo) */}
+                  {routeGroupsList.length > 0 && (
+                    <div className="flex flex-col gap-2 p-3.5 bg-rose-50/70 border border-rose-200/80 rounded-2xl shadow-2xs">
+                      <div className="flex items-center justify-between px-1">
+                        <label className="text-[10px] font-black text-rose-700 uppercase tracking-widest flex items-center gap-1.5">
+                          <Layers className="w-3.5 h-3.5 text-rose-600" />
+                          <span>Agrupadores de Rutas</span>
+                          {hrSelectedGroup && (
+                            <span className="text-[9px] bg-rose-200 text-rose-900 px-2 py-0.5 rounded-full font-extrabold ml-1">
+                              Filtrado por: {hrSelectedGroup}
+                            </span>
+                          )}
+                        </label>
+                        {hrSelectedGroup && (
+                          <button
+                            type="button"
+                            onClick={() => setHrSelectedGroup(null)}
+                            className="text-[10px] font-extrabold text-rose-600 hover:text-rose-800 underline cursor-pointer"
+                          >
+                            Ver Todos los Agrupadores
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="flex flex-wrap gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setHrSelectedGroup(null)}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all border shadow-2xs cursor-pointer flex items-center gap-1.5 ${
+                            hrSelectedGroup === null
+                              ? 'bg-rose-600 border-rose-700 text-white shadow-rose-200/70'
+                              : 'bg-white border-rose-200/90 text-rose-800 hover:bg-rose-100/80 hover:border-rose-300'
+                          }`}
+                        >
+                          <span>Todos</span>
+                        </button>
+
+                        {routeGroupsList.map(groupName => {
+                          const isSelected = hrSelectedGroup === groupName;
+                          // Count total documents across all routes in this group for the active date
+                          const groupRoutes = routes.filter(r => getRouteGroup(r) === groupName);
+                          const totalGroupDocs = groupRoutes.reduce((sum, r) => {
                             const manifestId = `${r.id}_${hrSelectedDate}`;
                             const isFinal = !!manifests[manifestId]?.isFinalized;
-                            const docCount = isFinal 
+                            const count = isFinal 
                               ? (manifests[manifestId]?.documentsSnapshot?.length || 0)
                               : mergedDocuments.filter(d => d.assignment?.route === r.id && d.assignment?.dispatchDate === hrSelectedDate).length;
-                            const isSelected = hrSelectedRoute === r.id;
+                            return sum + count;
+                          }, 0);
 
-                            return (
-                              <button
-                                key={r.id}
-                                onClick={() => setHrSelectedRoute(r.id)}
-                                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border shadow-sm cursor-pointer flex items-center gap-1.5 ${
+                          return (
+                            <button
+                              key={groupName}
+                              type="button"
+                              onClick={() => setHrSelectedGroup(isSelected ? null : groupName)}
+                              className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all border shadow-2xs cursor-pointer flex items-center gap-1.5 ${
+                                isSelected
+                                  ? 'bg-rose-600 border-rose-700 text-white shadow-rose-200 ring-2 ring-rose-400/40 scale-102'
+                                  : 'bg-white border-rose-200/90 text-rose-800 hover:bg-rose-100/90 hover:border-rose-400 hover:text-rose-950'
+                              }`}
+                            >
+                              <span>{groupName}</span>
+                              {totalGroupDocs > 0 && (
+                                <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-black ${
                                   isSelected 
-                                    ? isFinal 
-                                      ? 'bg-emerald-600 border-emerald-700 text-white shadow-emerald-100'
-                                      : 'bg-indigo-600 border-indigo-700 text-white shadow-indigo-100' 
-                                    : isFinal
-                                      ? 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100'
-                                      : 'bg-white border-slate-200 text-slate-600 hover:border-indigo-300 hover:text-indigo-600'
-                                }`}
-                              >
-                                {isFinal && <Save className="w-3.5 h-3.5 shrink-0 text-current" />}
-                                <span>{r.name}</span>
-                                {docCount > 0 && (
-                                  <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-black ${
-                                    isSelected 
-                                      ? 'bg-white/20 text-white' 
-                                      : isFinal 
-                                        ? 'bg-emerald-200 text-emerald-800' 
-                                        : 'bg-indigo-100 text-indigo-700'
-                                  }`}>
-                                    {docCount}
-                                  </span>
-                                )}
-                              </button>
-                            );
-                          })
+                                    ? 'bg-white/25 text-white' 
+                                    : 'bg-rose-100 text-rose-800 border border-rose-200/60'
+                                }`}>
+                                  {totalGroupDocs}
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Rutas Disponibles */}
+                  <div className="flex flex-col gap-1.5">
+                    <div className="flex items-center justify-between ml-1">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase">
+                        Rutas Disponibles {hrSelectedGroup ? `(${filteredAvailableRoutes.length} de ${routes.length})` : `(${routes.length})`}
+                      </label>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {filteredAvailableRoutes.length > 0 ? (
+                        filteredAvailableRoutes.map(r => {
+                          const manifestId = `${r.id}_${hrSelectedDate}`;
+                          const isFinal = !!manifests[manifestId]?.isFinalized;
+                          const docCount = isFinal 
+                            ? (manifests[manifestId]?.documentsSnapshot?.length || 0)
+                            : mergedDocuments.filter(d => d.assignment?.route === r.id && d.assignment?.dispatchDate === hrSelectedDate).length;
+                          const isSelected = hrSelectedRoute === r.id;
+
+                          return (
+                            <button
+                              key={r.id}
+                              onClick={() => setHrSelectedRoute(r.id)}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border shadow-sm cursor-pointer flex items-center gap-1.5 ${
+                                isSelected 
+                                  ? isFinal 
+                                    ? 'bg-emerald-600 border-emerald-700 text-white shadow-emerald-100'
+                                    : 'bg-indigo-600 border-indigo-700 text-white shadow-indigo-100' 
+                                  : isFinal
+                                    ? 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100'
+                                    : 'bg-white border-slate-200 text-slate-600 hover:border-indigo-300 hover:text-indigo-600'
+                              }`}
+                            >
+                              {isFinal && <Save className="w-3.5 h-3.5 shrink-0 text-current" />}
+                              <span>{r.name}</span>
+                              {docCount > 0 && (
+                                <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-black ${
+                                  isSelected 
+                                    ? 'bg-white/20 text-white' 
+                                    : isFinal 
+                                      ? 'bg-emerald-200 text-emerald-800' 
+                                      : 'bg-indigo-100 text-indigo-700'
+                                }`}>
+                                  {docCount}
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })
                       ) : (
-                        <p className="text-[10px] text-slate-400 italic">No hay rutas configuradas</p>
+                        <p className="text-[10px] text-slate-400 italic">
+                          {hrSelectedGroup ? `No hay rutas configuradas en el agrupador "${hrSelectedGroup}"` : "No hay rutas configuradas"}
+                        </p>
                       )}
                     </div>
                   </div>
