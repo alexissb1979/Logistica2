@@ -829,6 +829,7 @@ export default function App() {
       const originRouteName = routeMap[m.routeId || ''] || m.routeId || 'Ruta Histórica';
 
       m.documentsSnapshot.forEach(d => {
+        if (d.alertDismissed) return;
         const isFailed = d.trackingStatus === 'NO ENTREGADO' || d.trackingStatus === 'NO RETIRADO';
         if (!isFailed) return;
 
@@ -860,7 +861,7 @@ export default function App() {
             location: d.location || '',
             guideNumber: d.guideNumber || '',
             proceso: d.proceso || 'ENTREGA',
-            isAdditional: d.isAdditional
+            isAdditional: (d as any).isAdditional
           });
         }
       });
@@ -875,11 +876,11 @@ export default function App() {
       return;
     }
     if (!targetRoute || targetRoute === 'UNASSIGNED') {
-      showToast("Seleccione Ruta", "Debe seleccionar una ruta válida para reasignar los puntos.", "warning");
+      showToast("Seleccione Ruta", "Debe seleccionar una ruta válida para reasignar los puntos.", "info");
       return;
     }
     if (!targetDate) {
-      showToast("Seleccione Fecha", "Debe seleccionar una fecha de despacho válida.", "warning");
+      showToast("Seleccione Fecha", "Debe seleccionar una fecha de despacho válida.", "info");
       return;
     }
 
@@ -910,6 +911,54 @@ export default function App() {
     } catch (err: any) {
       console.error("Error reassigning failed points:", err);
       showToast("Error", "No se pudieron reasignar los puntos: " + err.message, "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteResolvedFailedPoints = async (items: FailedPointItem[]) => {
+    if (userProfile?.role !== 'ADMIN') {
+      showToast("Permiso Denegado", "Solo los usuarios Administradores pueden desestimar o inhabilitar registros de la alerta.", "error");
+      return;
+    }
+    if (!items || items.length === 0) return;
+
+    try {
+      setLoading(true);
+      const manifestUpdates: Record<string, { id: string; tipo: string }[]> = {};
+      items.forEach(item => {
+        if (!manifestUpdates[item.originManifestId]) {
+          manifestUpdates[item.originManifestId] = [];
+        }
+        manifestUpdates[item.originManifestId].push({ id: item.id, tipo: item.tipo });
+      });
+
+      const batch = writeBatch(db);
+
+      for (const [mId, docItems] of Object.entries(manifestUpdates)) {
+        const manifest = manifests[mId];
+        if (manifest && manifest.documentsSnapshot) {
+          const docIdsToDismiss = new Set(docItems.map(d => d.id));
+          const newSnapshot = manifest.documentsSnapshot.map(d => {
+            if (docIdsToDismiss.has(d.id)) {
+              return {
+                ...d,
+                alertDismissed: true
+              };
+            }
+            return d;
+          });
+
+          const manifestRef = doc(db, "manifests", mId);
+          batch.set(manifestRef, { documentsSnapshot: newSnapshot, updatedAt: serverTimestamp() }, { merge: true });
+        }
+      }
+
+      await batch.commit();
+      showToast("Registros Inhabilitados", `Se inhabilitaron ${items.length} registro(s) del panel de alertas (sin alterar el estado en la hoja de ruta de origen).`, "success");
+    } catch (err: any) {
+      console.error("Error dismissing failed points from alert panel:", err);
+      showToast("Error", "No se pudieron inhabilitar los registros: " + err.message, "error");
     } finally {
       setLoading(false);
     }
@@ -5949,6 +5998,8 @@ export default function App() {
             defaultTargetRoute={hrSelectedRoute}
             defaultTargetDate={hrSelectedDate || new Date().toISOString().split('T')[0]}
             onReassign={handleReassignFailedPoints}
+            onDeleteResolved={handleDeleteResolvedFailedPoints}
+            isAdmin={userProfile?.role === 'ADMIN'}
             formatDocId={formatDocId}
             formatCLP={formatCLP}
           />

@@ -10,6 +10,8 @@ import {
   Square, 
   ArrowRight, 
   AlertCircle, 
+  AlertTriangle,
+  Trash2,
   CheckCircle2, 
   MapPin, 
   FileText,
@@ -46,6 +48,8 @@ interface FailedPointsReassignmentModalProps {
   defaultTargetRoute?: string;
   defaultTargetDate?: string;
   onReassign: (items: FailedPointItem[], targetRoute: string, targetDate: string) => Promise<void>;
+  onDeleteResolved?: (items: FailedPointItem[]) => Promise<void>;
+  isAdmin?: boolean;
   formatDocId: (tipo: string, id: string) => string;
   formatCLP: (val: number) => string;
 }
@@ -59,6 +63,8 @@ export default function FailedPointsReassignmentModal({
   defaultTargetRoute = '',
   defaultTargetDate = '',
   onReassign,
+  onDeleteResolved,
+  isAdmin = false,
   formatDocId,
   formatCLP
 }: FailedPointsReassignmentModalProps) {
@@ -70,6 +76,7 @@ export default function FailedPointsReassignmentModal({
   const [searchTerm, setSearchTerm] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [individualRouteMap, setIndividualRouteMap] = useState<Record<string, string>>({});
+  const [confirmDeleteModal, setConfirmDeleteModal] = useState<FailedPointItem[] | null>(null);
 
   if (!isOpen) return null;
 
@@ -160,7 +167,7 @@ export default function FailedPointsReassignmentModal({
                 Puntos con Estado "No Entregado" para Reasignar
               </h3>
               <p className="text-xs text-slate-500 font-medium">
-                Seleccione los puntos fallidos de hojas de ruta anteriores para programarlos en una nueva ruta del día.
+                Seleccione los puntos fallidos de hojas de ruta anteriores para programarlos en una nueva ruta o eliminarlos si ya están resueltos.
               </p>
             </div>
           </div>
@@ -174,7 +181,7 @@ export default function FailedPointsReassignmentModal({
           </button>
         </div>
 
-        {/* Global Reassignment Control Panel */}
+        {/* Global Reassignment & Deletion Control Panel */}
         <div className="p-4 sm:p-5 bg-gradient-to-r from-indigo-900 via-slate-900 to-indigo-950 text-white shrink-0 shadow-inner flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800">
           <div className="flex flex-col sm:flex-row sm:items-center gap-3 flex-1">
             <div className="flex flex-col gap-1 min-w-[180px]">
@@ -205,15 +212,30 @@ export default function FailedPointsReassignmentModal({
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <button
               disabled={selectedIds.length === 0 || isSubmitting}
               onClick={handleBulkReassign}
-              className="flex-1 md:flex-none px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 disabled:bg-slate-700 disabled:text-slate-500 text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-emerald-500/20 transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer disabled:cursor-not-allowed border border-emerald-400/30"
+              className="flex-1 md:flex-none px-4 py-2.5 bg-emerald-500 hover:bg-emerald-400 disabled:bg-slate-700 disabled:text-slate-500 text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-emerald-500/20 transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer disabled:cursor-not-allowed border border-emerald-400/30"
             >
               <Send className="w-4 h-4" />
-              <span>Reasignar Seleccionados ({selectedIds.length})</span>
+              <span>Reasignar ({selectedIds.length})</span>
             </button>
+
+            {isAdmin && onDeleteResolved && (
+              <button
+                disabled={selectedIds.length === 0 || isSubmitting}
+                onClick={() => {
+                  const itemsToDelete = failedDocs.filter(d => selectedIds.includes(d.id));
+                  if (itemsToDelete.length > 0) setConfirmDeleteModal(itemsToDelete);
+                }}
+                className="flex-1 md:flex-none px-4 py-2.5 bg-rose-600 hover:bg-rose-500 disabled:bg-slate-800 disabled:text-slate-600 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-rose-600/20 transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer disabled:cursor-not-allowed border border-rose-500/30"
+                title="Eliminar o desestimar registros resueltos seleccionados (Solo Administradores)"
+              >
+                <Trash2 className="w-4 h-4 text-rose-200" />
+                <span>Eliminar Resueltos ({selectedIds.length})</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -328,7 +350,7 @@ export default function FailedPointsReassignmentModal({
                     </div>
                   </div>
 
-                  {/* Right Column: Amount & Single Reassign Action */}
+                  {/* Right Column: Amount & Single Reassign/Delete Actions */}
                   <div className="flex flex-col sm:flex-row md:flex-col items-end justify-between md:justify-center gap-3 shrink-0 pt-3 md:pt-0 border-t md:border-t-0 border-slate-100">
                     <div className="text-right">
                       <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Monto Pendiente</span>
@@ -358,6 +380,18 @@ export default function FailedPointsReassignmentModal({
                         <span>Asignar</span>
                         <ArrowRight className="w-3.5 h-3.5" />
                       </button>
+
+                      {isAdmin && onDeleteResolved && (
+                        <button
+                          type="button"
+                          disabled={isSubmitting}
+                          onClick={() => setConfirmDeleteModal([item])}
+                          className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-lg transition-all active:scale-95 cursor-pointer shrink-0"
+                          title="Eliminar este registro resuelto (Solo Administradores)"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -369,7 +403,7 @@ export default function FailedPointsReassignmentModal({
         {/* Modal Footer */}
         <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between shrink-0">
           <span className="text-xs text-slate-500 font-medium">
-            💡 Al reasignar, el documento volverá a estar disponible en la hoja de ruta seleccionada para la fecha elegida.
+            💡 Al reasignar, el documento volverá a estar disponible. Los administradores pueden eliminar registros resueltos directamente.
           </span>
           <button
             onClick={onClose}
@@ -379,6 +413,70 @@ export default function FailedPointsReassignmentModal({
           </button>
         </div>
       </motion.div>
+
+      {/* Delete Confirmation Modal */}
+      <AnimatePresence>
+        {confirmDeleteModal && (
+          <div className="fixed inset-0 z-[100000] bg-slate-900/80 backdrop-blur-xs flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              className="bg-white rounded-3xl shadow-2xl border border-slate-200 p-6 max-w-md w-full space-y-4"
+            >
+              <div className="flex items-center gap-3.5 text-rose-600">
+                <div className="p-3 bg-rose-100 rounded-2xl border border-rose-200">
+                  <AlertTriangle className="w-6 h-6 text-rose-600" />
+                </div>
+                <div>
+                  <h3 className="font-black text-slate-900 text-base">¿Eliminar registros resueltos?</h3>
+                  <p className="text-xs text-slate-500 font-medium">Acción disponible exclusivamente para Administradores.</p>
+                </div>
+              </div>
+
+              <div className="text-xs text-slate-600 leading-relaxed bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-1">
+                <p>
+                  Se eliminarán <strong>{confirmDeleteModal.length}</strong> registro(s) de la lista de Alertas de Entregas Fallidas.
+                </p>
+                <p className="text-slate-500 text-[11px]">
+                  El registro se desestimará del panel de alertas, conservando intacto su estado de origen en la hoja de ruta.
+                </p>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  disabled={isSubmitting}
+                  onClick={() => setConfirmDeleteModal(null)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  disabled={isSubmitting}
+                  onClick={async () => {
+                    if (onDeleteResolved && confirmDeleteModal) {
+                      setIsSubmitting(true);
+                      try {
+                        const deletedIds = confirmDeleteModal.map(i => i.id);
+                        await onDeleteResolved(confirmDeleteModal);
+                        setSelectedIds(prev => prev.filter(id => !deletedIds.includes(id)));
+                      } finally {
+                        setIsSubmitting(false);
+                        setConfirmDeleteModal(null);
+                      }
+                    }
+                  }}
+                  className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-md cursor-pointer flex items-center gap-1.5"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Sí, Eliminar ({confirmDeleteModal.length})</span>
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
+

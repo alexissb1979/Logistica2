@@ -99,6 +99,7 @@ export interface LogisticsManifest {
     trackingStatus?: 'ENTREGADO' | 'NO ENTREGADO' | 'RETIRADO' | 'NO RETIRADO' | 'EN CURSO';
     trackingObservation?: string;
     failedReason?: 'POR HORARIO' | 'CLIENTE NO RECIBE' | 'NO CARGADO' | string;
+    alertDismissed?: boolean;
     detalle?: ProductDetail[];
     proceso?: 'ENTREGA' | 'RETIRO';
     location?: string;
