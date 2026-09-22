@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   TrendingUp, 
@@ -35,7 +35,8 @@ import {
   Percent,
   ArrowUpDown,
   Coins,
-  Table
+  Table,
+  Flame
 } from 'lucide-react';
 import { 
   ResponsiveContainer, 
@@ -53,7 +54,8 @@ import {
   Line, 
   AreaChart, 
   Area,
-  ComposedChart
+  ComposedChart,
+  LabelList
 } from 'recharts';
 import { LogisticsManifest, LogisticsVehicle, LogisticsRoute } from '../types';
 
@@ -99,6 +101,11 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
   const [routeSortDir, setRouteSortDir] = useState<'asc' | 'desc'>('desc');
   const [routeViewMode, setRouteViewMode] = useState<'TABLE' | 'CHART'>('TABLE');
 
+  // Delivery points by route group view options (Carga Operativa por Agrupador)
+  const [groupChartMetric, setGroupChartMetric] = useState<'ENTREGAS' | 'ENTREGAS_STATUS' | 'TOTAL_POINTS'>('ENTREGAS');
+  const [groupChartSort, setGroupChartSort] = useState<'DESC' | 'ASC' | 'ALPHA'>('DESC');
+  const [groupChartViewMode, setGroupChartViewMode] = useState<'CHART' | 'TABLE'>('CHART');
+
   // Monthly Comparison View Controls
   const [selectedMonthRange, setSelectedMonthRange] = useState<'ALL' | 'LAST_3' | 'LAST_6' | 'THIS_YEAR'>('ALL');
   const [monthlyTab, setMonthlyTab] = useState<'CHARTS' | 'TABLE'>('CHARTS');
@@ -116,16 +123,26 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
 
   // Destination Normalization Helper
   const normalizeDestinationName = (name: string): string => {
-    if (!name) return 'Sin asignar';
-    let cleaned = name.replace(/\s*\(\d+\)\s*$/g, '');
-    cleaned = cleaned.replace(/\s*-\s*\d+\s*$/g, '');
+    if (!name) return 'Sin Asignar';
+    let cleaned = name.replace(/\s*[\(-]?\s*\d+\s*[\)]?\s*$/g, '');
     cleaned = cleaned.trim().toUpperCase();
-    return cleaned || 'Sin asignar';
+    return cleaned || 'SIN ASIGNAR';
   };
+
+  // Helper to obtain group name prioritizing route.group then cleaned name
+  const getRouteGroupName = useCallback((routeId?: string): string => {
+    if (!routeId) return 'SIN ASIGNAR';
+    const rawRName = routeMap[routeId] || routeId;
+    const routeObj = routes.find(r => r.id === routeId || r.name === rawRName);
+    if (routeObj?.group && routeObj.group.trim()) {
+      return routeObj.group.trim().toUpperCase();
+    }
+    return normalizeDestinationName(routeObj?.name || rawRName);
+  }, [routeMap, routes]);
 
   // Modal detail states for clicking charts
   const [activeDetailFilter, setActiveDetailFilter] = useState<{
-    type: 'date' | 'status' | 'route' | 'vehicle' | 'driver' | 'month';
+    type: 'date' | 'status' | 'route' | 'vehicle' | 'driver' | 'month' | 'routeGroup';
     value: string;
     title: string;
   } | null>(null);
@@ -582,6 +599,11 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
       if (type === 'date') {
         return m.date === value;
       }
+      if (type === 'routeGroup') {
+        const rId = m.routeId || '';
+        const grp = getRouteGroupName(rId);
+        return grp === value;
+      }
       if (type === 'route') {
         const routeIdMatch = Object.entries(routeMap).find(([id, name]) => name === value)?.[0] || value;
         return m.routeId === routeIdMatch;
@@ -607,7 +629,7 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
       }
       return false;
     });
-  }, [activeDetailFilter, processedData, routeMap, vehicleMap, driverMap]);
+  }, [activeDetailFilter, processedData, routeMap, vehicleMap, driverMap, getRouteGroupName]);
 
   // Compute all documents for Service Level Detail modal
   const allServiceLevelDocuments = useMemo(() => {
@@ -878,6 +900,142 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
       })
       .sort((a,b) => b.Viajes - a.Viajes || b['Carga Total ($)'] - a['Carga Total ($)']);
   }, [processedData, routeMap, routes]);
+
+  // 5.B Workload & Delivery Points by Route Group (Carga Operativa por Agrupador de Rutas)
+  const deliveryPointsByRouteGroup = useMemo(() => {
+    const groupStats: Record<string, {
+      agrupador: string;
+      puntosEntrega: number;
+      entregasExitosas: number;
+      entregasFallidas: number;
+      entregasEnCurso: number;
+      puntosRetiro: number;
+      totalPuntos: number;
+      viajes: number;
+      subrutas: Set<string>;
+      cargaTotalValor: number;
+    }> = {};
+
+    processedData.forEach(m => {
+      const rId = m.routeId || 'UNKNOWN';
+      const groupName = getRouteGroupName(rId);
+      const rawRouteName = routeMap[rId] || rId;
+
+      if (!groupStats[groupName]) {
+        groupStats[groupName] = {
+          agrupador: groupName,
+          puntosEntrega: 0,
+          entregasExitosas: 0,
+          entregasFallidas: 0,
+          entregasEnCurso: 0,
+          puntosRetiro: 0,
+          totalPuntos: 0,
+          viajes: 0,
+          subrutas: new Set(),
+          cargaTotalValor: 0
+        };
+      }
+
+      groupStats[groupName].viajes++;
+      if (rawRouteName && rawRouteName !== 'UNKNOWN' && rawRouteName !== 'Sin asignar') {
+        groupStats[groupName].subrutas.add(rawRouteName);
+      }
+
+      const docs = m.documentsSnapshot || [];
+      groupStats[groupName].totalPuntos += docs.length;
+
+      docs.forEach(d => {
+        const isRetiro = d.proceso === 'RETIRO' || d.tipo === 'OC' || d.trackingStatus === 'RETIRADO' || d.trackingStatus === 'NO RETIRADO';
+        const amt = d.tipo === 'OC' ? 0 : (d.totalAmount ?? d.totalPendiente ?? 0);
+        groupStats[groupName].cargaTotalValor += amt;
+
+        if (isRetiro) {
+          groupStats[groupName].puntosRetiro++;
+        } else {
+          groupStats[groupName].puntosEntrega++;
+          if (d.trackingStatus === 'ENTREGADO' || d.trackingStatus === 'COMPLETO') {
+            groupStats[groupName].entregasExitosas++;
+          } else if (d.trackingStatus === 'NO ENTREGADO') {
+            groupStats[groupName].entregasFallidas++;
+          } else {
+            groupStats[groupName].entregasEnCurso++;
+          }
+        }
+      });
+    });
+
+    return Object.values(groupStats).map(item => {
+      const subrutasArr = Array.from(item.subrutas);
+      const efectividadPct = item.puntosEntrega > 0 
+        ? Math.round((item.entregasExitosas / item.puntosEntrega) * 100) 
+        : 0;
+      const avgPuntosPorViaje = item.viajes > 0 
+        ? Number((item.puntosEntrega / item.viajes).toFixed(1)) 
+        : 0;
+
+      return {
+        agrupador: item.agrupador,
+        puntosEntrega: item.puntosEntrega,
+        entregasExitosas: item.entregasExitosas,
+        entregasFallidas: item.entregasFallidas,
+        entregasEnCurso: item.entregasEnCurso,
+        puntosRetiro: item.puntosRetiro,
+        totalPuntos: item.totalPuntos,
+        viajes: item.viajes,
+        efectividadPct,
+        avgPuntosPorViaje,
+        cargaTotalValor: item.cargaTotalValor,
+        cargaMillones: Math.round(item.cargaTotalValor / 1000),
+        subrutasCount: subrutasArr.length,
+        subrutasTexto: subrutasArr.slice(0, 3).join(', ') + (subrutasArr.length > 3 ? ` (+${subrutasArr.length - 3})` : '')
+      };
+    });
+  }, [processedData, getRouteGroupName, routeMap]);
+
+  // Sorted list for Recharts bar chart
+  const sortedGroupChartData = useMemo(() => {
+    return [...deliveryPointsByRouteGroup].sort((a, b) => {
+      if (groupChartSort === 'ALPHA') {
+        return a.agrupador.localeCompare(b.agrupador, 'es-CL');
+      }
+      if (groupChartSort === 'ASC') {
+        const key = groupChartMetric === 'TOTAL_POINTS' ? 'totalPuntos' : 'puntosEntrega';
+        return a[key] - b[key];
+      }
+      const key = groupChartMetric === 'TOTAL_POINTS' ? 'totalPuntos' : 'puntosEntrega';
+      return b[key] - a[key] || b.totalPuntos - a.totalPuntos;
+    });
+  }, [deliveryPointsByRouteGroup, groupChartSort, groupChartMetric]);
+
+  // Overall workload KPI summary
+  const groupWorkloadSummary = useMemo(() => {
+    if (deliveryPointsByRouteGroup.length === 0) {
+      return {
+        totalDeliveryPoints: 0,
+        totalPickupPoints: 0,
+        totalAllPoints: 0,
+        maxZone: null as typeof deliveryPointsByRouteGroup[0] | null,
+        avgPointsPerZone: 0
+      };
+    }
+
+    const totalDeliveryPoints = deliveryPointsByRouteGroup.reduce((acc, curr) => acc + curr.puntosEntrega, 0);
+    const totalPickupPoints = deliveryPointsByRouteGroup.reduce((acc, curr) => acc + curr.puntosRetiro, 0);
+    const totalAllPoints = deliveryPointsByRouteGroup.reduce((acc, curr) => acc + curr.totalPuntos, 0);
+    const sortedByDelivery = [...deliveryPointsByRouteGroup].sort((a, b) => b.puntosEntrega - a.puntosEntrega);
+    const maxZone = sortedByDelivery[0];
+    const avgPointsPerZone = deliveryPointsByRouteGroup.length > 0 
+      ? Math.round(totalDeliveryPoints / deliveryPointsByRouteGroup.length) 
+      : 0;
+
+    return {
+      totalDeliveryPoints,
+      totalPickupPoints,
+      totalAllPoints,
+      maxZone,
+      avgPointsPerZone
+    };
+  }, [deliveryPointsByRouteGroup]);
 
   // 6. Driver Efficiency & Operation Breakdown Leaderboard
   const driverPerformanceData = useMemo(() => {
@@ -2070,6 +2228,590 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
                 )}
               </div>
 
+            </div>
+
+            {/* 2.B Carga Operativa: Puntos de Entrega por Agrupador de Rutas */}
+            <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm flex flex-col gap-6" id="workload-by-route-group-section">
+              {/* Header and Controls */}
+              <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+                <div className="text-left">
+                  <div className="flex items-center gap-2.5">
+                    <span className="p-2.5 bg-rose-50 text-rose-600 rounded-2xl border border-rose-200/80 shadow-2xs">
+                      <Layers className="w-5 h-5 text-rose-600" />
+                    </span>
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="text-base font-black text-slate-900 uppercase tracking-tight flex items-center gap-2">
+                          Carga Operativa: Puntos de Entrega por Agrupador de Rutas
+                        </h3>
+                        {groupWorkloadSummary.maxZone && (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-rose-100 text-rose-800 border border-rose-200">
+                            <Flame className="w-3 h-3 text-rose-600 animate-pulse" />
+                            Mayor Carga: {groupWorkloadSummary.maxZone.agrupador} ({groupWorkloadSummary.maxZone.puntosEntrega} pts)
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-500 font-medium">
+                        Identificación de zonas geográficas y agrupadores con mayor concentración de puntos de entrega para dimensionar la capacidad de flota.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Interactive Controls */}
+                <div className="flex flex-wrap items-center gap-2.5 self-start xl:self-auto">
+                  {/* Metric Switcher */}
+                  <div className="flex bg-slate-100 p-1 rounded-xl">
+                    <button
+                      type="button"
+                      onClick={() => setGroupChartMetric('ENTREGAS')}
+                      className={`px-3 py-1.5 text-[10px] font-black rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
+                        groupChartMetric === 'ENTREGAS'
+                          ? 'bg-white text-rose-700 shadow-sm'
+                          : 'text-slate-500 hover:text-slate-800'
+                      }`}
+                    >
+                      <Truck className="w-3 h-3 text-current" />
+                      <span>Solo Entregas</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setGroupChartMetric('ENTREGAS_STATUS')}
+                      className={`px-3 py-1.5 text-[10px] font-black rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
+                        groupChartMetric === 'ENTREGAS_STATUS'
+                          ? 'bg-white text-rose-700 shadow-sm'
+                          : 'text-slate-500 hover:text-slate-800'
+                      }`}
+                    >
+                      <CheckCircle2 className="w-3 h-3 text-current" />
+                      <span>Desglose OTIF</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setGroupChartMetric('TOTAL_POINTS')}
+                      className={`px-3 py-1.5 text-[10px] font-black rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
+                        groupChartMetric === 'TOTAL_POINTS'
+                          ? 'bg-white text-rose-700 shadow-sm'
+                          : 'text-slate-500 hover:text-slate-800'
+                      }`}
+                    >
+                      <RotateCcw className="w-3 h-3 text-current" />
+                      <span>Entregas + Retiros</span>
+                    </button>
+                  </div>
+
+                  {/* Sorter Selector */}
+                  <div className="flex bg-slate-100 p-1 rounded-xl">
+                    <button
+                      type="button"
+                      onClick={() => setGroupChartSort('DESC')}
+                      title="Ordenar de mayor a menor carga"
+                      className={`px-2.5 py-1.5 text-[10px] font-black rounded-lg transition-all cursor-pointer ${
+                        groupChartSort === 'DESC' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'
+                      }`}
+                    >
+                      Mayor Carga ↓
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setGroupChartSort('ASC')}
+                      title="Ordenar de menor a mayor carga"
+                      className={`px-2.5 py-1.5 text-[10px] font-black rounded-lg transition-all cursor-pointer ${
+                        groupChartSort === 'ASC' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'
+                      }`}
+                    >
+                      Menor Carga ↑
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setGroupChartSort('ALPHA')}
+                      title="Ordenar alfabéticamente"
+                      className={`px-2.5 py-1.5 text-[10px] font-black rounded-lg transition-all cursor-pointer ${
+                        groupChartSort === 'ALPHA' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'
+                      }`}
+                    >
+                      A - Z
+                    </button>
+                  </div>
+
+                  {/* View Mode Toggle */}
+                  <div className="flex bg-slate-100 p-1 rounded-xl">
+                    <button
+                      type="button"
+                      onClick={() => setGroupChartViewMode('CHART')}
+                      className={`px-2.5 py-1.5 rounded-lg text-[10px] font-extrabold flex items-center gap-1 transition-all cursor-pointer ${
+                        groupChartViewMode === 'CHART'
+                          ? 'bg-white text-rose-700 shadow-sm'
+                          : 'text-slate-500 hover:text-slate-800'
+                      }`}
+                    >
+                      <BarChart2 className="w-3.5 h-3.5" />
+                      <span>Gráfico</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setGroupChartViewMode('TABLE')}
+                      className={`px-2.5 py-1.5 rounded-lg text-[10px] font-extrabold flex items-center gap-1 transition-all cursor-pointer ${
+                        groupChartViewMode === 'TABLE'
+                          ? 'bg-white text-rose-700 shadow-sm'
+                          : 'text-slate-500 hover:text-slate-800'
+                      }`}
+                    >
+                      <Table className="w-3.5 h-3.5" />
+                      <span>Tabla</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* KPI Summary Cards for Workload */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* 1. Zona de Mayor Carga */}
+                <div className="p-4 rounded-2xl bg-rose-50/60 border border-rose-200/80 flex flex-col justify-between">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[10px] font-bold text-rose-700 uppercase tracking-wider flex items-center gap-1">
+                      <Flame className="w-3 h-3 text-rose-600" /> Zona de Mayor Demanda
+                    </span>
+                    <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-rose-200 text-rose-900 font-mono">
+                      TOP #1
+                    </span>
+                  </div>
+                  <div className="mt-1">
+                    <h4 className="text-sm font-black text-rose-950 truncate" title={groupWorkloadSummary.maxZone?.agrupador || '-'}>
+                      {groupWorkloadSummary.maxZone?.agrupador || 'Sin Datos'}
+                    </h4>
+                    <p className="text-xl font-black text-rose-700 font-mono mt-0.5">
+                      {groupWorkloadSummary.maxZone?.puntosEntrega || 0} <span className="text-xs font-bold text-rose-600">pts entrega</span>
+                    </p>
+                  </div>
+                  <div className="mt-2 pt-2 border-t border-rose-200/70 text-[10px] text-rose-800 flex items-center justify-between font-medium">
+                    <span>
+                      {groupWorkloadSummary.totalDeliveryPoints > 0 && groupWorkloadSummary.maxZone
+                        ? `${Math.round((groupWorkloadSummary.maxZone.puntosEntrega / groupWorkloadSummary.totalDeliveryPoints) * 100)}% de entregas`
+                        : '0% de entregas'}
+                    </span>
+                    <span className="font-bold">
+                      {groupWorkloadSummary.maxZone?.avgPuntosPorViaje || 0} pts/viaje
+                    </span>
+                  </div>
+                </div>
+
+                {/* 2. Total Puntos de Entrega */}
+                <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col justify-between">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                      <Truck className="w-3 h-3 text-indigo-600" /> Total Puntos de Entrega
+                    </span>
+                    <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 font-mono">
+                      GLOBAL
+                    </span>
+                  </div>
+                  <div className="mt-1">
+                    <h4 className="text-xs font-bold text-slate-500">Puntos Planificados</h4>
+                    <p className="text-xl font-black text-slate-900 font-mono mt-0.5">
+                      {groupWorkloadSummary.totalDeliveryPoints} <span className="text-xs font-bold text-slate-500">entregas</span>
+                    </p>
+                  </div>
+                  <div className="mt-2 pt-2 border-t border-slate-200/80 text-[10px] text-slate-500 flex items-center justify-between font-medium">
+                    <span>+ {groupWorkloadSummary.totalPickupPoints} retiros (OC)</span>
+                    <span className="font-bold text-slate-700 font-mono">
+                      {groupWorkloadSummary.totalAllPoints} pts totales
+                    </span>
+                  </div>
+                </div>
+
+                {/* 3. Promedio por Agrupador */}
+                <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col justify-between">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                      <MapPin className="w-3 h-3 text-emerald-600" /> Promedio por Zona
+                    </span>
+                    <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 font-mono">
+                      MEDIA
+                    </span>
+                  </div>
+                  <div className="mt-1">
+                    <h4 className="text-xs font-bold text-slate-500">Densidad por Agrupador</h4>
+                    <p className="text-xl font-black text-slate-900 font-mono mt-0.5">
+                      {groupWorkloadSummary.avgPointsPerZone} <span className="text-xs font-bold text-slate-500">pts / zona</span>
+                    </p>
+                  </div>
+                  <div className="mt-2 pt-2 border-t border-slate-200/80 text-[10px] text-slate-500 flex items-center justify-between font-medium">
+                    <span>En {deliveryPointsByRouteGroup.length} zonas activas</span>
+                    <span className="font-bold text-slate-700">Consolidado</span>
+                  </div>
+                </div>
+
+                {/* 4. Efectividad OTIF en Entregas */}
+                <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col justify-between">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                      <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Nivel de Cumplimiento
+                    </span>
+                    <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-mono">
+                      OTIF
+                    </span>
+                  </div>
+                  <div className="mt-1">
+                    <h4 className="text-xs font-bold text-slate-500">Efectividad en Zonas</h4>
+                    <p className="text-xl font-black text-emerald-600 font-mono mt-0.5">
+                      {metrics.otifPercentage}% <span className="text-xs font-bold text-slate-500">entregado</span>
+                    </p>
+                  </div>
+                  <div className="mt-2 pt-2 border-t border-slate-200/80 text-[10px] text-slate-500 flex items-center justify-between font-medium">
+                    <span>{metrics.deliveredOrders} de {metrics.totalOrders} docs</span>
+                    <span className="font-bold text-emerald-700 font-mono">Completado</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Chart or Table Body */}
+              {sortedGroupChartData.length === 0 ? (
+                <div className="py-16 text-center text-slate-400 text-xs italic bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
+                  No se encontraron puntos de entrega registrados para los filtros seleccionados.
+                </div>
+              ) : groupChartViewMode === 'CHART' ? (
+                <div className="w-full">
+                  <div 
+                    className="w-full"
+                    style={{ height: `${Math.max(340, Math.min(650, sortedGroupChartData.length * 48))}px` }}
+                  >
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart
+                        data={sortedGroupChartData}
+                        layout="vertical"
+                        margin={{ top: 10, right: 60, left: 15, bottom: 10 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
+                        <XAxis 
+                          type="number" 
+                          tickLine={false} 
+                          axisLine={false} 
+                          tick={{ fontSize: 10, fill: '#64748b' }} 
+                        />
+                        <YAxis 
+                          type="category" 
+                          dataKey="agrupador" 
+                          width={160} 
+                          tickLine={false} 
+                          axisLine={false} 
+                          tick={{ fill: '#1e293b', fontSize: 11, fontWeight: 700 }} 
+                        />
+                        <Tooltip
+                          content={({ active, payload }) => {
+                            if (!active || !payload || !payload.length) return null;
+                            const item = payload[0].payload;
+                            return (
+                              <div className="text-xs space-y-2 max-w-xs bg-slate-900 border border-slate-700 p-3.5 rounded-2xl shadow-2xl text-white">
+                                <div className="border-b border-slate-700/80 pb-1.5 flex items-center justify-between gap-2">
+                                  <span className="font-black text-rose-400 uppercase tracking-wide">{item.agrupador}</span>
+                                  <span className="text-[10px] bg-rose-950 text-rose-300 px-2 py-0.5 rounded-full border border-rose-800 font-mono">
+                                    {item.viajes} {item.viajes === 1 ? 'viaje' : 'viajes'}
+                                  </span>
+                                </div>
+                                <div className="grid grid-cols-2 gap-2 text-[11px]">
+                                  <div className="bg-slate-800/80 p-1.5 rounded-lg">
+                                    <span className="text-slate-400 text-[10px] block">Puntos de Entrega</span>
+                                    <span className="font-black text-rose-400 font-mono text-sm">{item.puntosEntrega} pts</span>
+                                  </div>
+                                  <div className="bg-slate-800/80 p-1.5 rounded-lg">
+                                    <span className="text-slate-400 text-[10px] block">Promedio / Viaje</span>
+                                    <span className="font-bold text-white font-mono text-sm">{item.avgPuntosPorViaje} pts/HR</span>
+                                  </div>
+                                  <div className="bg-slate-800/80 p-1.5 rounded-lg">
+                                    <span className="text-slate-400 text-[10px] block">Entregas Exitosas</span>
+                                    <span className="font-bold text-emerald-400 font-mono">{item.entregasExitosas} ({item.efectividadPct}%)</span>
+                                  </div>
+                                  <div className="bg-slate-800/80 p-1.5 rounded-lg">
+                                    <span className="text-slate-400 text-[10px] block">Puntos de Retiro</span>
+                                    <span className="font-bold text-indigo-400 font-mono">{item.puntosRetiro} pts</span>
+                                  </div>
+                                </div>
+                                {item.cargaTotalValor > 0 && (
+                                  <div className="text-[10px] text-slate-300 pt-1 border-t border-slate-800 flex justify-between">
+                                    <span>Carga Despachada:</span>
+                                    <span className="font-mono font-bold text-white">{formatCLP(item.cargaTotalValor)}</span>
+                                  </div>
+                                )}
+                                {item.subrutasTexto && (
+                                  <div className="text-[10px] text-slate-400 italic pt-1">
+                                    Subrutas: {item.subrutasTexto}
+                                  </div>
+                                )}
+                                <div className="text-[9px] text-rose-300 pt-1 font-bold flex items-center gap-1 border-t border-slate-800/80">
+                                  <span>🔍 Clic para ver Hojas de Ruta de esta zona</span>
+                                </div>
+                              </div>
+                            );
+                          }}
+                        />
+
+                        {groupChartMetric === 'ENTREGAS' && (
+                          <Bar
+                            dataKey="puntosEntrega"
+                            name="Puntos de Entrega"
+                            radius={[0, 6, 6, 0]}
+                            maxBarSize={22}
+                            cursor="pointer"
+                            onClick={(entry: any) => {
+                              const payload = entry?.payload || entry;
+                              if (payload?.agrupador) {
+                                setActiveDetailFilter({
+                                  type: 'routeGroup',
+                                  value: payload.agrupador,
+                                  title: `Hojas de Ruta - Agrupador: ${payload.agrupador}`
+                                });
+                              }
+                            }}
+                          >
+                            {sortedGroupChartData.map((entry, index) => {
+                              const color = 
+                                index === 0 ? '#e11d48' : 
+                                index === 1 ? '#f43f5e' : 
+                                index === 2 ? '#fb7185' : 
+                                index < 5 ? '#f87171' :   
+                                '#fda4af';                
+                              return <Cell key={`cell-${index}`} fill={color} />;
+                            })}
+                            <LabelList
+                              dataKey="puntosEntrega"
+                              position="right"
+                              formatter={(val: any) => `${val} pts`}
+                              style={{ fill: '#334155', fontSize: 11, fontWeight: 800, fontFamily: 'monospace' }}
+                            />
+                          </Bar>
+                        )}
+
+                        {groupChartMetric === 'ENTREGAS_STATUS' && (
+                          <>
+                            <Legend verticalAlign="top" height={34} iconSize={9} wrapperStyle={{ fontSize: '11px', fontWeight: 'bold' }} />
+                            <Bar
+                              dataKey="entregasExitosas"
+                              name="Entregas Exitosas"
+                              stackId="st"
+                              fill="#10b981"
+                              radius={[0, 0, 0, 0]}
+                              maxBarSize={22}
+                              cursor="pointer"
+                              onClick={(entry: any) => {
+                                const payload = entry?.payload || entry;
+                                if (payload?.agrupador) {
+                                  setActiveDetailFilter({
+                                    type: 'routeGroup',
+                                    value: payload.agrupador,
+                                    title: `Hojas de Ruta - Agrupador: ${payload.agrupador}`
+                                  });
+                                }
+                              }}
+                            />
+                            <Bar
+                              dataKey="entregasFallidas"
+                              name="Entregas No Realizadas"
+                              stackId="st"
+                              fill="#f43f5e"
+                              radius={[0, 0, 0, 0]}
+                              maxBarSize={22}
+                              cursor="pointer"
+                              onClick={(entry: any) => {
+                                const payload = entry?.payload || entry;
+                                if (payload?.agrupador) {
+                                  setActiveDetailFilter({
+                                    type: 'routeGroup',
+                                    value: payload.agrupador,
+                                    title: `Hojas de Ruta - Agrupador: ${payload.agrupador}`
+                                  });
+                                }
+                              }}
+                            />
+                            <Bar
+                              dataKey="entregasEnCurso"
+                              name="En Tránsito / Pendientes"
+                              stackId="st"
+                              fill="#94a3b8"
+                              radius={[0, 6, 6, 0]}
+                              maxBarSize={22}
+                              cursor="pointer"
+                              onClick={(entry: any) => {
+                                const payload = entry?.payload || entry;
+                                if (payload?.agrupador) {
+                                  setActiveDetailFilter({
+                                    type: 'routeGroup',
+                                    value: payload.agrupador,
+                                    title: `Hojas de Ruta - Agrupador: ${payload.agrupador}`
+                                  });
+                                }
+                              }}
+                            >
+                              <LabelList
+                                dataKey="puntosEntrega"
+                                position="right"
+                                formatter={(val: any) => `${val} pts`}
+                                style={{ fill: '#334155', fontSize: 11, fontWeight: 800, fontFamily: 'monospace' }}
+                              />
+                            </Bar>
+                          </>
+                        )}
+
+                        {groupChartMetric === 'TOTAL_POINTS' && (
+                          <>
+                            <Legend verticalAlign="top" height={34} iconSize={9} wrapperStyle={{ fontSize: '11px', fontWeight: 'bold' }} />
+                            <Bar
+                              dataKey="puntosEntrega"
+                              name="Puntos de Entrega"
+                              stackId="tp"
+                              fill="#e11d48"
+                              radius={[0, 0, 0, 0]}
+                              maxBarSize={22}
+                              cursor="pointer"
+                              onClick={(entry: any) => {
+                                const payload = entry?.payload || entry;
+                                if (payload?.agrupador) {
+                                  setActiveDetailFilter({
+                                    type: 'routeGroup',
+                                    value: payload.agrupador,
+                                    title: `Hojas de Ruta - Agrupador: ${payload.agrupador}`
+                                  });
+                                }
+                              }}
+                            />
+                            <Bar
+                              dataKey="puntosRetiro"
+                              name="Puntos de Retiro (OC)"
+                              stackId="tp"
+                              fill="#6366f1"
+                              radius={[0, 6, 6, 0]}
+                              maxBarSize={22}
+                              cursor="pointer"
+                              onClick={(entry: any) => {
+                                const payload = entry?.payload || entry;
+                                if (payload?.agrupador) {
+                                  setActiveDetailFilter({
+                                    type: 'routeGroup',
+                                    value: payload.agrupador,
+                                    title: `Hojas de Ruta - Agrupador: ${payload.agrupador}`
+                                  });
+                                }
+                              }}
+                            >
+                              <LabelList
+                                dataKey="totalPuntos"
+                                position="right"
+                                formatter={(val: any) => `${val} pts`}
+                                style={{ fill: '#334155', fontSize: 11, fontWeight: 800, fontFamily: 'monospace' }}
+                              />
+                            </Bar>
+                          </>
+                        )}
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              ) : (
+                <div className="overflow-x-auto border border-slate-100 rounded-2xl">
+                  <table className="w-full text-left border-collapse text-xs min-w-[700px]">
+                    <thead className="bg-slate-50 sticky top-0 border-b border-slate-100 select-none">
+                      <tr className="text-[9px] font-extrabold text-slate-400 uppercase tracking-widest">
+                        <th className="px-4 py-3">Ranking / Agrupador</th>
+                        <th className="px-3 py-3 text-center bg-rose-50/50 text-rose-800">Puntos Entrega</th>
+                        <th className="px-3 py-3 text-center">Retiros</th>
+                        <th className="px-3 py-3 text-center">Total Pts</th>
+                        <th className="px-3 py-3 text-center">Viajes (HR)</th>
+                        <th className="px-3 py-3 text-center">Prom. Pts/Viaje</th>
+                        <th className="px-3 py-3 text-right">Efectividad</th>
+                        <th className="px-4 py-3 text-right">Carga ($)</th>
+                        <th className="px-4 py-3 text-center">Acción</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {sortedGroupChartData.map((item, idx) => {
+                        const pctOfTotal = groupWorkloadSummary.totalDeliveryPoints > 0
+                          ? Math.round((item.puntosEntrega / groupWorkloadSummary.totalDeliveryPoints) * 100)
+                          : 0;
+
+                        return (
+                          <tr 
+                            key={idx}
+                            className="hover:bg-rose-50/30 transition-colors"
+                          >
+                            <td className="px-4 py-2.5">
+                              <div className="flex items-center gap-2">
+                                <span className={`w-5 h-5 rounded-lg flex items-center justify-center text-[10px] font-bold font-mono ${
+                                  idx === 0 
+                                    ? 'bg-rose-600 text-white shadow-2xs' 
+                                    : idx < 3 
+                                      ? 'bg-rose-100 text-rose-800' 
+                                      : 'bg-slate-100 text-slate-600'
+                                }`}>
+                                  {idx + 1}
+                                </span>
+                                <div>
+                                  <span className="font-bold text-slate-800 block">{item.agrupador}</span>
+                                  {item.subrutasTexto && (
+                                    <span className="text-[9px] text-slate-400 truncate max-w-[200px] block">
+                                      {item.subrutasTexto}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-3 py-2.5 text-center bg-rose-50/20">
+                              <div className="flex flex-col items-center justify-center">
+                                <span className="font-black text-rose-700 font-mono text-sm">{item.puntosEntrega}</span>
+                                <div className="w-16 bg-rose-100 h-1 rounded-full overflow-hidden mt-1">
+                                  <div 
+                                    className="bg-rose-600 h-full rounded-full" 
+                                    style={{ width: `${Math.min(100, pctOfTotal)}%` }}
+                                  />
+                                </div>
+                                <span className="text-[9px] text-rose-600/80 font-bold font-mono">{pctOfTotal}% carga</span>
+                              </div>
+                            </td>
+                            <td className="px-3 py-2.5 text-center font-bold text-slate-600 font-mono">
+                              {item.puntosRetiro}
+                            </td>
+                            <td className="px-3 py-2.5 text-center font-black text-slate-800 font-mono">
+                              {item.totalPuntos}
+                            </td>
+                            <td className="px-3 py-2.5 text-center">
+                              <span className="inline-block px-2 py-0.5 rounded-lg bg-slate-100 text-slate-700 font-bold font-mono text-[11px]">
+                                {item.viajes}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2.5 text-center font-bold text-slate-700 font-mono">
+                              {item.avgPuntosPorViaje} pts/HR
+                            </td>
+                            <td className="px-3 py-2.5 text-right">
+                              <span className={`font-mono font-black ${
+                                item.efectividadPct >= 90 ? 'text-emerald-700' : item.efectividadPct >= 75 ? 'text-amber-700' : 'text-rose-700'
+                              }`}>
+                                {item.efectividadPct}%
+                              </span>
+                            </td>
+                            <td className="px-4 py-2.5 text-right font-mono font-bold text-slate-800">
+                              {formatCLP(item.cargaTotalValor)}
+                            </td>
+                            <td className="px-4 py-2.5 text-center">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setActiveDetailFilter({
+                                    type: 'routeGroup',
+                                    value: item.agrupador,
+                                    title: `Hojas de Ruta - Agrupador: ${item.agrupador}`
+                                  });
+                                }}
+                                className="px-2.5 py-1 text-[10px] font-black text-rose-700 hover:text-white bg-rose-50 hover:bg-rose-600 border border-rose-200 rounded-lg transition-all cursor-pointer shadow-2xs"
+                              >
+                                Ver Detalle
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
 
             {/* 3. Bottom Grid: Geographical efficiency and Driver statistics */}
