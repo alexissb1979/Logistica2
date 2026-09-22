@@ -24,6 +24,6 @@ export const OFFICIAL_VEHICLES_SEED: OfficialVehicleSeed[] = [
   { plate: "SSZZ-97", year: 2023, fuelType: "BENCINA", loadCapacity: "400 kg", engineNumber: "", chassisNumber: "", billingRut: "77071403-6" },
   { plate: "SLTC-12", year: 2023, fuelType: "DIESEL", loadCapacity: "950 kg", engineNumber: "D4CBN430444", chassisNumber: "KMFVA17RPPC361541", billingRut: "76444911-8" },
   { plate: "RTYP-78", year: 2022, fuelType: "DIESEL", loadCapacity: "8 Pasajeros", engineNumber: "Y1A061957", chassisNumber: "93KK0R1A6NE178681", billingRut: "76444911-8" },
-  { plate: "BBYH-58", year: 2007, fuelType: "DIESEL", loadCapacity: "8 Pasajeros", engineNumber: "", chassisNumber: "", billingRut: "76761733-K" },
+  { plate: "BBHY-58", year: 2007, fuelType: "DIESEL", loadCapacity: "8 Pasajeros", engineNumber: "", chassisNumber: "", billingRut: "76761733-K" },
   { plate: "VSDW-97", year: 2026, fuelType: "DIESEL", loadCapacity: "8 Pasajeros", engineNumber: "", chassisNumber: "", billingRut: "76444911-8" },
 ];

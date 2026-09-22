@@ -46,6 +46,10 @@ export interface LogisticsVehicle {
   lastMaintenanceDate?: string;
   technicalInspectionDate?: string;
   emissionsInspectionDate?: string;
+  circulationPermitDate?: string; // Permiso de circulación
+  insuranceCompany?: string; // Cia de Seguros
+  insurancePolicyNumber?: string; // N° Póliza
+  insurancePhone?: string; // Teléfono Cia
   billingRut?: string;
   createdAt?: any;
 }

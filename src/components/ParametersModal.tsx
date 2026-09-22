@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion } from 'motion/react';
-import { X, MapPin, Plus, Edit2, Trash2, User, Truck, Save, Coins, Calendar as CalendarIcon, Search } from 'lucide-react';
+import { X, MapPin, Plus, Edit2, Trash2, User, Truck, Save, Coins, Calendar as CalendarIcon, Search, CheckCircle2, AlertTriangle, Loader2 } from 'lucide-react';
 import { LogisticsRoute, LogisticsDriver, LogisticsVehicle, LogisticsAssignment } from '../types';
 import { OFFICIAL_VEHICLES_SEED } from '../data/officialVehicles';
 import { db } from '../firebase';
@@ -52,6 +52,25 @@ export default function ParametersModal({
 }: ParametersModalProps) {
   const [paramsTab, setParamsTab] = useState<'routes' | 'drivers' | 'vehicles' | 'fuelCosts'>('routes');
 
+  // Delete Confirmation & Feedback States (replaces window.confirm/alert which fail in iframes)
+  const [confirmDeleteTarget, setConfirmDeleteTarget] = useState<{
+    type: 'vehicle' | 'driver' | 'route';
+    id: string;
+    name: string;
+  } | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [feedbackMessage, setFeedbackMessage] = useState<{
+    type: 'success' | 'error';
+    text: string;
+  } | null>(null);
+
+  useEffect(() => {
+    if (feedbackMessage) {
+      const timer = setTimeout(() => setFeedbackMessage(null), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [feedbackMessage]);
+
   // Fuel Cost States
   const [fuelYear, setFuelYear] = useState<string>(() => new Date().getFullYear().toString());
   const [fuelGrid, setFuelGrid] = useState<Record<string, Record<string, number>>>({});
@@ -84,6 +103,10 @@ export default function ParametersModal({
   const [newVehicleLastMaintenanceDate, setNewVehicleLastMaintenanceDate] = useState('');
   const [newVehicleTechnicalInspectionDate, setNewVehicleTechnicalInspectionDate] = useState('');
   const [newVehicleEmissionsInspectionDate, setNewVehicleEmissionsInspectionDate] = useState('');
+  const [newVehicleCirculationPermitDate, setNewVehicleCirculationPermitDate] = useState('');
+  const [newVehicleInsuranceCompany, setNewVehicleInsuranceCompany] = useState('');
+  const [newVehicleInsurancePolicyNumber, setNewVehicleInsurancePolicyNumber] = useState('');
+  const [newVehicleInsurancePhone, setNewVehicleInsurancePhone] = useState('');
   const [newVehicleBillingRut, setNewVehicleBillingRut] = useState('');
 
   // Editing states
@@ -100,6 +123,10 @@ export default function ParametersModal({
   const [editingVehicleLastMaintenanceDate, setEditingVehicleLastMaintenanceDate] = useState('');
   const [editingVehicleTechnicalInspectionDate, setEditingVehicleTechnicalInspectionDate] = useState('');
   const [editingVehicleEmissionsInspectionDate, setEditingVehicleEmissionsInspectionDate] = useState('');
+  const [editingVehicleCirculationPermitDate, setEditingVehicleCirculationPermitDate] = useState('');
+  const [editingVehicleInsuranceCompany, setEditingVehicleInsuranceCompany] = useState('');
+  const [editingVehicleInsurancePolicyNumber, setEditingVehicleInsurancePolicyNumber] = useState('');
+  const [editingVehicleInsurancePhone, setEditingVehicleInsurancePhone] = useState('');
   const [editingVehicleBillingRut, setEditingVehicleBillingRut] = useState('');
 
   // Search filter state
@@ -118,6 +145,10 @@ export default function ParametersModal({
       (v.engineNumber || '').toLowerCase().includes(term) ||
       (v.chassisNumber || '').toLowerCase().includes(term) ||
       (v.loadCapacity || '').toLowerCase().includes(term) ||
+      (v.insuranceCompany || '').toLowerCase().includes(term) ||
+      (v.insurancePolicyNumber || '').toLowerCase().includes(term) ||
+      (v.insurancePhone || '').toLowerCase().includes(term) ||
+      (v.circulationPermitDate || '').toLowerCase().includes(term) ||
       String(v.year || '').includes(term)
     );
   }, [vehicles, searchTerm]);
@@ -176,7 +207,10 @@ export default function ParametersModal({
       setTimeout(() => setFuelSaveSuccess(false), 3000);
     } catch (err: any) {
       console.error("Error guardando costos de combustible:", err);
-      alert(`Error al guardar costos de combustible: ${err.message || 'Sin permisos'}`);
+      setFeedbackMessage({
+        type: 'error',
+        text: `Error al guardar costos de combustible: ${err.message || 'Sin permisos'}`
+      });
     } finally {
       setIsSavingFuel(false);
     }
@@ -194,9 +228,16 @@ export default function ParametersModal({
       });
       setNewRouteName('');
       setNewRouteGroup('');
+      setFeedbackMessage({
+        type: 'success',
+        text: 'Ruta añadida exitosamente.'
+      });
     } catch (error: any) {
       console.error("Error añadiendo ruta:", error);
-      alert(`Error al añadir ruta: ${error.message || 'Sin permisos'}`);
+      setFeedbackMessage({
+        type: 'error',
+        text: `Error al añadir ruta: ${error.message || 'Sin permisos'}`
+      });
     } finally {
       setLoading(false);
     }
@@ -215,42 +256,37 @@ export default function ParametersModal({
         group: trimmedGroup
       }, { merge: true });
       setEditingItemId(null);
+      setFeedbackMessage({
+        type: 'success',
+        text: 'Ruta actualizada exitosamente.'
+      });
     } catch (error: any) {
       console.error("Error al actualizar la ruta:", error);
-      alert(`Error al actualizar ruta: ${error.message || 'Verifique sus permisos'}`);
+      setFeedbackMessage({
+        type: 'error',
+        text: `Error al actualizar ruta: ${error.message || 'Verifique sus permisos'}`
+      });
     }
   };
 
-  const handleDeleteRoute = async (id: string) => {
+  const handleDeleteRoute = (id: string) => {
     if (loading) return;
-    try {
-      setLoading(true);
-      const routeObj = routes.find(r => r.id === id);
-      
-      const assignedDocsCount = Object.values(assignments).filter(a => a.route === id).length;
-      
-      if (assignedDocsCount > 0) {
-        alert(`No se puede eliminar la ruta "${routeObj?.name || id}": Existen ${assignedDocsCount} documentos asignados a esta ruta. Cambie la ruta de esos documentos antes de eliminarla.`);
-        return;
-      }
-
-      if (!window.confirm(`¿Seguro que desea eliminar la ruta "${routeObj?.name || id}" permanentemente?`)) {
-        return;
-      }
-      
-      await deleteDoc(doc(routesCol, id));
-      
-      setSelectedRoutes(prev => {
-        const next = new Set(prev);
-        next.delete(id);
-        return next;
+    const routeObj = routes.find(r => r.id === id);
+    const assignedDocsCount = Object.values(assignments).filter(a => a.route === id).length;
+    
+    if (assignedDocsCount > 0) {
+      setFeedbackMessage({
+        type: 'error',
+        text: `No se puede eliminar la ruta "${routeObj?.name || id}": Existen ${assignedDocsCount} documentos asignados a esta ruta.`
       });
-    } catch (error: any) {
-      console.error("Error al eliminar ruta:", error);
-      alert(`Error al eliminar la ruta: ${error.message || 'Error de permisos o conexión'}`);
-    } finally {
-      setLoading(false);
+      return;
     }
+
+    setConfirmDeleteTarget({
+      type: 'route',
+      id,
+      name: routeObj?.name || id
+    });
   };
 
   // Drivers Handlers
@@ -260,8 +296,15 @@ export default function ParametersModal({
       setLoading(true);
       await addDoc(driversCol, { name: newDriverName.trim(), createdAt: serverTimestamp() });
       setNewDriverName('');
+      setFeedbackMessage({
+        type: 'success',
+        text: 'Conductor añadido correctamente.'
+      });
     } catch (error: any) { 
-      alert(`Error: ${error.message}`); 
+      setFeedbackMessage({
+        type: 'error',
+        text: `Error al añadir conductor: ${error.message}`
+      });
     } finally { 
       setLoading(false); 
     }
@@ -272,18 +315,25 @@ export default function ParametersModal({
     try { 
       await setDoc(doc(driversCol, id), { name: name.trim() }, { merge: true }); 
       setEditingItemId(null); 
+      setFeedbackMessage({
+        type: 'success',
+        text: 'Conductor actualizado correctamente.'
+      });
     } catch (e: any) { 
-      alert(e.message); 
+      setFeedbackMessage({
+        type: 'error',
+        text: `Error al actualizar conductor: ${e.message}`
+      });
     }
   };
 
-  const handleDeleteDriver = async (id: string) => {
-    if (!window.confirm("¿Seguro que desea eliminar este conductor?")) return;
-    try { 
-      await deleteDoc(doc(driversCol, id)); 
-    } catch (e: any) { 
-      alert(e.message); 
-    }
+  const handleDeleteDriver = (id: string) => {
+    const dObj = drivers.find(d => d.id === id);
+    setConfirmDeleteTarget({
+      type: 'driver',
+      id,
+      name: dObj?.name || id
+    });
   };
 
   // Vehicles Handlers
@@ -304,6 +354,10 @@ export default function ParametersModal({
         lastMaintenanceDate: newVehicleLastMaintenanceDate,
         technicalInspectionDate: newVehicleTechnicalInspectionDate,
         emissionsInspectionDate: newVehicleEmissionsInspectionDate,
+        circulationPermitDate: newVehicleCirculationPermitDate,
+        insuranceCompany: newVehicleInsuranceCompany.trim(),
+        insurancePolicyNumber: newVehicleInsurancePolicyNumber.trim(),
+        insurancePhone: newVehicleInsurancePhone.trim(),
         billingRut: newVehicleBillingRut.trim(),
         createdAt: serverTimestamp() 
       });
@@ -318,10 +372,21 @@ export default function ParametersModal({
       setNewVehicleLastMaintenanceDate('');
       setNewVehicleTechnicalInspectionDate('');
       setNewVehicleEmissionsInspectionDate('');
+      setNewVehicleCirculationPermitDate('');
+      setNewVehicleInsuranceCompany('');
+      setNewVehicleInsurancePolicyNumber('');
+      setNewVehicleInsurancePhone('');
       setNewVehicleBillingRut('');
       setShowAddVehicleForm(false);
+      setFeedbackMessage({
+        type: 'success',
+        text: 'Vehículo registrado correctamente.'
+      });
     } catch (error: any) { 
-      alert(`Error: ${error.message}`); 
+      setFeedbackMessage({
+        type: 'error',
+        text: `Error al registrar vehículo: ${error.message}`
+      });
     } finally { 
       setLoading(false); 
     }
@@ -343,20 +408,73 @@ export default function ParametersModal({
         lastMaintenanceDate: editingVehicleLastMaintenanceDate,
         technicalInspectionDate: editingVehicleTechnicalInspectionDate,
         emissionsInspectionDate: editingVehicleEmissionsInspectionDate,
+        circulationPermitDate: editingVehicleCirculationPermitDate,
+        insuranceCompany: editingVehicleInsuranceCompany.trim(),
+        insurancePolicyNumber: editingVehicleInsurancePolicyNumber.trim(),
+        insurancePhone: editingVehicleInsurancePhone.trim(),
         billingRut: editingVehicleBillingRut.trim(),
       }, { merge: true }); 
       setEditingItemId(null); 
+      setFeedbackMessage({
+        type: 'success',
+        text: 'Vehículo actualizado correctamente.'
+      });
     } catch (e: any) { 
-      alert(e.message); 
+      setFeedbackMessage({
+        type: 'error',
+        text: `Error al actualizar vehículo: ${e.message}`
+      });
     }
   };
 
-  const handleDeleteVehicle = async (id: string) => {
-    if (!window.confirm("¿Seguro que desea eliminar este vehículo?")) return;
-    try { 
-      await deleteDoc(doc(vehiclesCol, id)); 
-    } catch (e: any) { 
-      alert(e.message); 
+  const handleDeleteVehicle = (id: string) => {
+    const vObj = vehicles.find(v => v.id === id);
+    setConfirmDeleteTarget({
+      type: 'vehicle',
+      id,
+      name: vObj?.plate || id
+    });
+  };
+
+  // Safe In-App Deletion Executor (Works reliably in iframe without browser dialogs)
+  const handleExecuteDelete = async () => {
+    if (!confirmDeleteTarget || isDeleting) return;
+    const { type, id, name } = confirmDeleteTarget;
+    try {
+      setIsDeleting(true);
+      if (type === 'vehicle') {
+        await deleteDoc(doc(vehiclesCol, id));
+        setFeedbackMessage({
+          type: 'success',
+          text: `Vehículo con patente "${name}" eliminado exitosamente del catálogo.`
+        });
+      } else if (type === 'driver') {
+        await deleteDoc(doc(driversCol, id));
+        setFeedbackMessage({
+          type: 'success',
+          text: `Conductor "${name}" eliminado exitosamente.`
+        });
+      } else if (type === 'route') {
+        await deleteDoc(doc(routesCol, id));
+        setSelectedRoutes(prev => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
+        setFeedbackMessage({
+          type: 'success',
+          text: `Ruta "${name}" eliminada exitosamente.`
+        });
+      }
+      setConfirmDeleteTarget(null);
+    } catch (error: any) {
+      console.error(`Error al eliminar ${type}:`, error);
+      setFeedbackMessage({
+        type: 'error',
+        text: `Error al eliminar ${name}: ${error.message || 'Error de conexión o permisos'}`
+      });
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -394,10 +512,16 @@ export default function ParametersModal({
           addedCount++;
         }
       }
-      alert(`Sincronización completada exitosamente.\nVehículos actualizados: ${updatedCount}\nVehículos nuevos creados: ${addedCount}`);
+      setFeedbackMessage({
+        type: 'success',
+        text: `Sincronización completada exitosamente. Actualizados: ${updatedCount}, Creados: ${addedCount}.`
+      });
     } catch (e: any) {
       console.error("Error al sincronizar vehículos:", e);
-      alert(`Error al guardar los vehículos en Firestore: ${e.message}`);
+      setFeedbackMessage({
+        type: 'error',
+        text: `Error al sincronizar catálogo con Firestore: ${e.message}`
+      });
     } finally {
       setLoading(false);
     }
@@ -461,6 +585,31 @@ export default function ParametersModal({
             <span>Combustible</span>
           </button>
         </div>
+
+        {/* Notificación / Feedback en pantalla (reemplaza alert) */}
+        {feedbackMessage && (
+          <div className={`mx-6 my-2 p-3 rounded-xl flex items-center justify-between text-xs font-bold transition-all shadow-xs ${
+            feedbackMessage.type === 'success' 
+              ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' 
+              : 'bg-rose-50 text-rose-800 border border-rose-200'
+          }`}>
+            <div className="flex items-center gap-2">
+              {feedbackMessage.type === 'success' ? (
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              ) : (
+                <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+              )}
+              <span>{feedbackMessage.text}</span>
+            </div>
+            <button 
+              type="button" 
+              onClick={() => setFeedbackMessage(null)} 
+              className="p-1 hover:bg-black/5 rounded-lg cursor-pointer ml-2 text-slate-500 hover:text-slate-800"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
 
         {/* Buscador Superior */}
         <div className="px-6 py-3 bg-slate-50/90 border-b border-slate-200/80 flex items-center justify-between gap-3">
@@ -963,6 +1112,57 @@ export default function ParametersModal({
                         onChange={(e) => setNewVehicleEmissionsInspectionDate(e.target.value)}
                       />
                     </div>
+
+                    <div>
+                      <label className="text-[10px] font-extrabold text-slate-500 uppercase block mb-1">
+                        Permiso de Circulación
+                      </label>
+                      <input 
+                        type="date" 
+                        className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                        value={newVehicleCirculationPermitDate}
+                        onChange={(e) => setNewVehicleCirculationPermitDate(e.target.value)}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-extrabold text-slate-500 uppercase block mb-1">
+                        Cía de Seguros
+                      </label>
+                      <input 
+                        type="text" 
+                        placeholder="Ej: BCI Seguros, Mapfre, HDI"
+                        className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                        value={newVehicleInsuranceCompany}
+                        onChange={(e) => setNewVehicleInsuranceCompany(e.target.value)}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-extrabold text-slate-500 uppercase block mb-1">
+                        N° Póliza
+                      </label>
+                      <input 
+                        type="text" 
+                        placeholder="Ej: POL-12345678"
+                        className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold font-mono focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                        value={newVehicleInsurancePolicyNumber}
+                        onChange={(e) => setNewVehicleInsurancePolicyNumber(e.target.value)}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-extrabold text-slate-500 uppercase block mb-1">
+                        Teléfono Cía
+                      </label>
+                      <input 
+                        type="text" 
+                        placeholder="Ej: 600 600 4040 / +56 9..."
+                        className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold font-mono focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                        value={newVehicleInsurancePhone}
+                        onChange={(e) => setNewVehicleInsurancePhone(e.target.value)}
+                      />
+                    </div>
                   </div>
 
                   <div className="flex justify-end items-center gap-2 mt-4">
@@ -1000,14 +1200,15 @@ export default function ParametersModal({
                       <th className="py-2.5 px-2">N° Motor</th>
                       <th className="py-2.5 px-2">N° Chasis</th>
                       <th className="py-2.5 px-2">Próx. Mant.</th>
-                      <th className="py-2.5 px-2">Rev. Téc. / Gases</th>
+                      <th className="py-2.5 px-2">Permiso / RT / Gas</th>
+                      <th className="py-2.5 px-2">Cía. Seguro / Póliza</th>
                       <th className="py-2.5 px-1.5 text-center">Acciones</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-[11px]">
                     {filteredVehicles.length === 0 && (
                       <tr>
-                        <td colSpan={12} className="py-8 text-center text-slate-400 text-xs font-semibold bg-slate-50/50">
+                        <td colSpan={13} className="py-8 text-center text-slate-400 text-xs font-semibold bg-slate-50/50">
                           {searchTerm ? `No se encontraron vehículos que coincidan con "${searchTerm}".` : 'No hay vehículos registrados.'}
                         </td>
                       </tr>
@@ -1018,7 +1219,7 @@ export default function ParametersModal({
                         if (editingItemId === v.id) {
                           return (
                             <tr key={v.id} className="bg-indigo-50/60 border-y-2 border-indigo-200">
-                              <td colSpan={12} className="p-4">
+                              <td colSpan={13} className="p-4">
                                 <div className="flex flex-col gap-3">
                                   <div className="flex items-center justify-between">
                                     <span className="text-[10px] font-black uppercase text-indigo-700 tracking-wider">
@@ -1147,6 +1348,45 @@ export default function ParametersModal({
                                         onChange={(e) => setEditingVehicleEmissionsInspectionDate(e.target.value)}
                                       />
                                     </div>
+                                    <div>
+                                      <label className="text-[9px] font-extrabold text-slate-400 uppercase block mb-0.5">Permiso Circulación</label>
+                                      <input 
+                                        type="date"
+                                        className="w-full text-xs font-bold px-2.5 py-1.5 border border-indigo-300 rounded-lg focus:outline-none bg-white"
+                                        value={editingVehicleCirculationPermitDate}
+                                        onChange={(e) => setEditingVehicleCirculationPermitDate(e.target.value)}
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="text-[9px] font-extrabold text-slate-400 uppercase block mb-0.5">Cía de Seguros</label>
+                                      <input 
+                                        type="text"
+                                        placeholder="Ej: BCI Seguros, Mapfre"
+                                        className="w-full text-xs font-bold px-2.5 py-1.5 border border-indigo-300 rounded-lg focus:outline-none bg-white"
+                                        value={editingVehicleInsuranceCompany}
+                                        onChange={(e) => setEditingVehicleInsuranceCompany(e.target.value)}
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="text-[9px] font-extrabold text-slate-400 uppercase block mb-0.5">N° Póliza</label>
+                                      <input 
+                                        type="text"
+                                        placeholder="Ej: POL-12345678"
+                                        className="w-full text-xs font-mono font-bold px-2.5 py-1.5 border border-indigo-300 rounded-lg focus:outline-none bg-white"
+                                        value={editingVehicleInsurancePolicyNumber}
+                                        onChange={(e) => setEditingVehicleInsurancePolicyNumber(e.target.value)}
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="text-[9px] font-extrabold text-slate-400 uppercase block mb-0.5">Teléfono Cía</label>
+                                      <input 
+                                        type="text"
+                                        placeholder="Ej: 600 600 4040"
+                                        className="w-full text-xs font-mono font-bold px-2.5 py-1.5 border border-indigo-300 rounded-lg focus:outline-none bg-white"
+                                        value={editingVehicleInsurancePhone}
+                                        onChange={(e) => setEditingVehicleInsurancePhone(e.target.value)}
+                                      />
+                                    </div>
                                   </div>
 
                                   <div className="flex justify-end gap-2 mt-2">
@@ -1225,8 +1465,22 @@ export default function ParametersModal({
                               )}
                             </td>
                             <td className="py-2 px-2 font-mono text-[9.5px] text-slate-600 whitespace-nowrap leading-tight">
+                              <div><span className="text-slate-400 font-semibold">PC:</span> {v.circulationPermitDate ? new Date(v.circulationPermitDate + 'T12:00:00').toLocaleDateString('es-CL') : '-'}</div>
                               <div><span className="text-slate-400 font-semibold">RT:</span> {v.technicalInspectionDate ? new Date(v.technicalInspectionDate + 'T12:00:00').toLocaleDateString('es-CL') : '-'}</div>
                               <div><span className="text-slate-400 font-semibold">Gas:</span> {v.emissionsInspectionDate ? new Date(v.emissionsInspectionDate + 'T12:00:00').toLocaleDateString('es-CL') : '-'}</div>
+                            </td>
+                            <td className="py-2 px-2 text-[10px] text-slate-700 whitespace-nowrap leading-tight">
+                              <div className="font-bold text-slate-800 truncate max-w-[130px]" title={v.insuranceCompany}>
+                                {v.insuranceCompany || <span className="text-slate-300 font-normal">-</span>}
+                              </div>
+                              <div className="font-mono text-[9.5px] text-slate-600 truncate max-w-[130px]" title={v.insurancePolicyNumber}>
+                                <span className="text-slate-400 font-semibold">Pól:</span> {v.insurancePolicyNumber || '-'}
+                              </div>
+                              {v.insurancePhone ? (
+                                <div className="font-mono text-[9px] text-indigo-600 truncate max-w-[130px]" title={v.insurancePhone}>
+                                  <span className="text-slate-400 font-semibold">Tel:</span> {v.insurancePhone}
+                                </div>
+                              ) : null}
                             </td>
                             <td className="py-2 px-1.5 text-center whitespace-nowrap">
                               <div className="flex items-center justify-center gap-0.5">
@@ -1244,6 +1498,10 @@ export default function ParametersModal({
                                     setEditingVehicleLastMaintenanceDate(v.lastMaintenanceDate || '');
                                     setEditingVehicleTechnicalInspectionDate(v.technicalInspectionDate || '');
                                     setEditingVehicleEmissionsInspectionDate(v.emissionsInspectionDate || '');
+                                    setEditingVehicleCirculationPermitDate(v.circulationPermitDate || '');
+                                    setEditingVehicleInsuranceCompany(v.insuranceCompany || '');
+                                    setEditingVehicleInsurancePolicyNumber(v.insurancePolicyNumber || '');
+                                    setEditingVehicleInsurancePhone(v.insurancePhone || '');
                                     setEditingVehicleBillingRut(v.billingRut || '');
                                   }} 
                                   className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer"
@@ -1370,6 +1628,58 @@ export default function ParametersModal({
             Cerrar
           </button>
         </div>
+
+        {/* Modal In-App de Confirmación de Eliminación (no bloqueado por el sandbox/iframe) */}
+        {confirmDeleteTarget && (
+          <div className="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+            <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl border border-slate-200 text-left">
+              <div className="flex items-center gap-3 text-rose-600 mb-3">
+                <div className="p-2.5 bg-rose-50 rounded-xl border border-rose-100">
+                  <Trash2 className="w-5 h-5 text-rose-600" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-slate-900">
+                    ¿Eliminar {confirmDeleteTarget.type === 'vehicle' ? 'Vehículo' : confirmDeleteTarget.type === 'driver' ? 'Conductor' : 'Ruta'}?
+                  </h3>
+                  <p className="text-[11px] text-slate-500 font-medium">Esta acción no se puede deshacer.</p>
+                </div>
+              </div>
+
+              <div className="my-3 p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-700">
+                ¿Confirma que desea eliminar permanentemente <span className="font-extrabold text-slate-900 font-mono">{confirmDeleteTarget.name}</span> del catálogo?
+              </div>
+
+              <div className="flex items-center justify-end gap-2 mt-4">
+                <button
+                  type="button"
+                  disabled={isDeleting}
+                  onClick={() => setConfirmDeleteTarget(null)}
+                  className="px-3.5 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-all cursor-pointer disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  disabled={isDeleting}
+                  onClick={handleExecuteDelete}
+                  className="px-4 py-1.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-sm transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  {isDeleting ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Eliminando...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Eliminar Definitivamente</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </motion.div>
     </div>
   );
