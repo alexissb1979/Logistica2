@@ -1019,6 +1019,7 @@ export default function App() {
                 canViewRouteSheets: data.permissions?.canViewRouteSheets ?? true,
                 canViewResumenRutas: data.permissions?.canViewResumenRutas ?? true,
                 canViewKPIs: data.permissions?.canViewKPIs ?? true,
+                canViewRequests: data.permissions?.canViewRequests ?? true,
                 canEditPlanning: data.permissions?.canEditPlanning ?? isAtLeastOperator,
                 canUploadExcel: data.permissions?.canUploadExcel ?? isAtLeastOperator,
                 canEditManifests: data.permissions?.canEditManifests ?? isAtLeastOperator,
@@ -1048,6 +1049,7 @@ export default function App() {
                 canViewRouteSheets: true,
                 canViewResumenRutas: true,
                 canViewKPIs: true,
+                canViewRequests: true,
                 canEditManifests: isDeveloperAdmin,
                 canEditParameters: isDeveloperAdmin,
                 canManageUsers: isDeveloperAdmin,
@@ -1330,7 +1332,7 @@ export default function App() {
           return true;
         });
 
-        if (activePendingForToday.length > 0) {
+        if (activePendingForToday.length > 0 && userProfile?.permissions?.canViewRequests) {
           setLastTriggeredTime(triggerKey);
           playAlertAudio();
           setIsAlarmOpen(true);
@@ -2637,24 +2639,33 @@ export default function App() {
   useEffect(() => {
     if (!userProfile) return;
 
-    const { canViewPlanning, canViewRouteSheets, canViewResumenRutas, canViewKPIs } = userProfile.permissions;
+    const { canViewPlanning, canViewRouteSheets, canViewResumenRutas, canViewKPIs, canViewRequests } = userProfile.permissions;
 
     if (activeTab === 'dashboard' && !canViewPlanning) {
       if (canViewRouteSheets) setActiveTab('hojaDeRuta');
       else if (canViewResumenRutas) setActiveTab('resumenRutas');
       else if (canViewKPIs) setActiveTab('kpis');
+      else if (canViewRequests) setActiveTab('solicitudes');
     } else if (activeTab === 'hojaDeRuta' && !canViewRouteSheets) {
       if (canViewPlanning) setActiveTab('dashboard');
       else if (canViewResumenRutas) setActiveTab('resumenRutas');
       else if (canViewKPIs) setActiveTab('kpis');
+      else if (canViewRequests) setActiveTab('solicitudes');
     } else if (activeTab === 'resumenRutas' && !canViewResumenRutas) {
       if (canViewPlanning) setActiveTab('dashboard');
       else if (canViewRouteSheets) setActiveTab('hojaDeRuta');
       else if (canViewKPIs) setActiveTab('kpis');
+      else if (canViewRequests) setActiveTab('solicitudes');
     } else if (activeTab === 'kpis' && !canViewKPIs) {
       if (canViewPlanning) setActiveTab('dashboard');
       else if (canViewRouteSheets) setActiveTab('hojaDeRuta');
       else if (canViewResumenRutas) setActiveTab('resumenRutas');
+      else if (canViewRequests) setActiveTab('solicitudes');
+    } else if (activeTab === 'solicitudes' && !canViewRequests) {
+      if (canViewPlanning) setActiveTab('dashboard');
+      else if (canViewRouteSheets) setActiveTab('hojaDeRuta');
+      else if (canViewResumenRutas) setActiveTab('resumenRutas');
+      else if (canViewKPIs) setActiveTab('kpis');
     }
   }, [userProfile, activeTab]);
 
@@ -3842,21 +3853,23 @@ export default function App() {
                 <BarChart3 className="w-4 h-4 lg:w-3.5 lg:h-3.5" /> KPIs y Análisis
               </button>
             )}
-            <button 
-              onClick={() => { setActiveTab('solicitudes'); setMobileMenuOpen(false); }}
-              className={`px-4 py-2 lg:py-1.5 rounded-md text-sm lg:text-xs font-black transition-all flex items-center gap-2 cursor-pointer text-left relative ${activeTab === 'solicitudes' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-700/50'} ${requests.filter(r => r.status === 'PENDIENTE').length > 0 ? 'border border-amber-500/35 bg-slate-800/80 animate-pulse text-amber-300' : ''}`}
-            >
-              <ClipboardList className={`w-4 h-4 lg:w-3.5 lg:h-3.5 ${requests.filter(r => r.status === 'PENDIENTE').length > 0 ? 'text-amber-400' : ''}`} /> 
-              <span>Solicitudes</span>
-              {requests.filter(r => r.status === 'PENDIENTE').length > 0 && (
-                <span className="flex items-center gap-1 ml-auto lg:ml-0">
-                  <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
-                  <span className="px-1.5 py-0.5 rounded-full text-[9px] bg-red-500 text-white font-black animate-bounce shrink-0">
-                    {requests.filter(r => r.status === 'PENDIENTE').length}
+            {userProfile?.permissions.canViewRequests && (
+              <button 
+                onClick={() => { setActiveTab('solicitudes'); setMobileMenuOpen(false); }}
+                className={`px-4 py-2 lg:py-1.5 rounded-md text-sm lg:text-xs font-black transition-all flex items-center gap-2 cursor-pointer text-left relative ${activeTab === 'solicitudes' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-700/50'} ${requests.filter(r => r.status === 'PENDIENTE').length > 0 ? 'border border-amber-500/35 bg-slate-800/80 animate-pulse text-amber-300' : ''}`}
+              >
+                <ClipboardList className={`w-4 h-4 lg:w-3.5 lg:h-3.5 ${requests.filter(r => r.status === 'PENDIENTE').length > 0 ? 'text-amber-400' : ''}`} /> 
+                <span>Solicitudes</span>
+                {requests.filter(r => r.status === 'PENDIENTE').length > 0 && (
+                  <span className="flex items-center gap-1 ml-auto lg:ml-0">
+                    <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
+                    <span className="px-1.5 py-0.5 rounded-full text-[9px] bg-red-500 text-white font-black animate-bounce shrink-0">
+                      {requests.filter(r => r.status === 'PENDIENTE').length}
+                    </span>
                   </span>
-                </span>
-              )}
-            </button>
+                )}
+              </button>
+            )}
           </nav>
 
           <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 sm:gap-3 border-t border-slate-700 lg:border-t-0 pt-4 lg:pt-0">
@@ -5420,12 +5433,15 @@ export default function App() {
                           const dName = driverMap[manifest.driverId || ''] || 'No asignado';
                           const vDesc = vehicleMap[manifest.vehicleId || ''] || 'No asignado';
                           const totalPoints = manifest.documentsSnapshot?.length ?? 0;
-                          const completedPoints = manifest.documentsSnapshot?.filter(d => 
+                          const deliveredPoints = manifest.documentsSnapshot?.filter(d => 
                             d.trackingStatus === 'ENTREGADO' || 
-                            d.trackingStatus === 'RETIRADO' || 
+                            d.trackingStatus === 'RETIRADO'
+                          ).length ?? 0;
+                          const failedPoints = manifest.documentsSnapshot?.filter(d => 
                             d.trackingStatus === 'NO ENTREGADO' || 
                             d.trackingStatus === 'NO RETIRADO'
                           ).length ?? 0;
+                          const completedPoints = deliveredPoints + failedPoints;
                           const pendingPoints = totalPoints - completedPoints;
                           const totalEstVal = manifest.documentsSnapshot?.reduce((s,d) => d.tipo === 'OC' ? s : s + (d.totalAmount ?? d.totalPendiente), 0) || 0;
                           
@@ -5581,20 +5597,29 @@ export default function App() {
                                 </div>
                               </td>
                               <td className="px-4 py-4 text-center">
-                                  <div className="flex items-center justify-center gap-3 min-w-[120px]">
+                                  <div className="flex items-center justify-center gap-2.5 min-w-[130px]">
                                     <div className="flex flex-col items-center">
                                       <span className="text-[10px] font-black text-slate-800 leading-none">{totalPoints}</span>
                                       <span className="text-[7px] text-slate-400 font-black uppercase tracking-widest mt-0.5">Total</span>
                                     </div>
                                     <div className="w-px h-5 bg-slate-200" />
                                     <div className="flex flex-col items-center">
-                                      <span className="text-[10px] font-black text-emerald-600 leading-none">{completedPoints}</span>
-                                      <span className="text-[7px] text-emerald-500/50 font-black uppercase tracking-widest mt-0.5">OK</span>
+                                      <span className="text-[10px] font-black text-emerald-600 leading-none">{deliveredPoints}</span>
+                                      <span className="text-[7px] text-emerald-500/50 font-black uppercase tracking-widest mt-0.5">Entr</span>
                                     </div>
+                                    {failedPoints > 0 && (
+                                      <>
+                                        <div className="w-px h-5 bg-slate-200" />
+                                        <div className="flex flex-col items-center">
+                                          <span className="text-[10px] font-black text-rose-600 leading-none">{failedPoints}</span>
+                                          <span className="text-[7px] text-rose-400 font-black uppercase tracking-widest mt-0.5">No Ent</span>
+                                        </div>
+                                      </>
+                                    )}
                                     <div className="w-px h-5 bg-slate-200" />
                                     <div className="flex flex-col items-center">
-                                      <span className={`text-[10px] font-black leading-none ${pendingPoints > 0 ? 'text-rose-600' : 'text-slate-300'}`}>{pendingPoints}</span>
-                                      <span className={`text-[7px] font-black uppercase tracking-widest mt-0.5 ${pendingPoints > 0 ? 'text-rose-400/50' : 'text-slate-300'}`}>Pend</span>
+                                      <span className={`text-[10px] font-black leading-none ${pendingPoints > 0 ? 'text-amber-600' : 'text-slate-300'}`}>{pendingPoints}</span>
+                                      <span className={`text-[7px] font-black uppercase tracking-widest mt-0.5 ${pendingPoints > 0 ? 'text-amber-500' : 'text-slate-300'}`}>Pend</span>
                                     </div>
                                   </div>
                               </td>
@@ -5704,12 +5729,15 @@ export default function App() {
                       const dName = driverMap[manifest.driverId || ''] || 'No asignado';
                       const vDesc = vehicleMap[manifest.vehicleId || ''] || 'No asignado';
                       const totalPoints = manifest.documentsSnapshot?.length ?? 0;
-                      const completedPoints = manifest.documentsSnapshot?.filter(d => 
+                      const deliveredPoints = manifest.documentsSnapshot?.filter(d => 
                         d.trackingStatus === 'ENTREGADO' || 
-                        d.trackingStatus === 'RETIRADO' || 
+                        d.trackingStatus === 'RETIRADO'
+                      ).length ?? 0;
+                      const failedPoints = manifest.documentsSnapshot?.filter(d => 
                         d.trackingStatus === 'NO ENTREGADO' || 
                         d.trackingStatus === 'NO RETIRADO'
                       ).length ?? 0;
+                      const completedPoints = deliveredPoints + failedPoints;
                       const pendingPoints = totalPoints - completedPoints;
                       const totalEstVal = manifest.documentsSnapshot?.reduce((s,d) => d.tipo === 'OC' ? s : s + (d.totalAmount ?? d.totalPendiente), 0) || 0;
                       
@@ -5808,10 +5836,11 @@ export default function App() {
                           {/* Quick Stats Summary (Compact when closed) */}
                           {!isExpanded && (
                             <div className="bg-slate-50/50 px-4 py-2.5 flex items-center justify-between text-[11px] border-t border-slate-100">
-                              <div className="flex items-center gap-3 text-slate-500">
+                              <div className="flex items-center gap-2.5 text-slate-500">
                                 <span>Total: <strong>{totalPoints}</strong></span>
-                                <span>OK: <strong className="text-emerald-600">{completedPoints}</strong></span>
-                                <span>Pend: <strong className={pendingPoints > 0 ? 'text-rose-600' : 'text-slate-400'}>{pendingPoints}</strong></span>
+                                <span>Entr: <strong className="text-emerald-600">{deliveredPoints}</strong></span>
+                                {failedPoints > 0 && <span>No Ent: <strong className="text-rose-600">{failedPoints}</strong></span>}
+                                <span>Pend: <strong className={pendingPoints > 0 ? 'text-amber-600' : 'text-slate-400'}>{pendingPoints}</strong></span>
                               </div>
                               <button
                                 type="button"
@@ -6070,7 +6099,7 @@ export default function App() {
           />
         )}
 
-        {activeTab === 'solicitudes' && (
+        {activeTab === 'solicitudes' && userProfile?.permissions.canViewRequests && (
           <LogisticsRequestsManager
             requests={requests}
             onCreateRequest={handleCreateRequest}
@@ -6138,7 +6167,9 @@ export default function App() {
         })()}
         onCompleteRequest={handleCompleteRequest}
         onGoToHistory={() => {
-          setActiveTab('solicitudes');
+          if (userProfile?.permissions.canViewRequests) {
+            setActiveTab('solicitudes');
+          }
           setIsAlarmOpen(false);
         }}
       />

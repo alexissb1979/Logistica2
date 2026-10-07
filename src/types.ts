@@ -150,6 +150,7 @@ export interface UserProfile {
     canViewRouteSheets: boolean;
     canViewResumenRutas: boolean;
     canViewKPIs: boolean;
+    canViewRequests: boolean;
     canEditManifests: boolean;
     canEditParameters: boolean;
     canUploadExcel: boolean;

@@ -119,10 +119,30 @@ export default function ManifestDetailModal({
   };
 
   const totalPoints = localSnapshot.length;
-  const completedPoints = localSnapshot.filter(d => 
-    ['ENTREGADO', 'RETIRADO', 'NO ENTREGADO', 'NO RETIRADO'].includes(d.trackingStatus || '')
+  const deliveredPoints = localSnapshot.filter(d => 
+    d.trackingStatus === 'ENTREGADO' || d.trackingStatus === 'RETIRADO'
   ).length;
-  const pendingPoints = totalPoints - completedPoints;
+  const failedPoints = localSnapshot.filter(d => 
+    d.trackingStatus === 'NO ENTREGADO' || d.trackingStatus === 'NO RETIRADO'
+  ).length;
+  const managedPoints = deliveredPoints + failedPoints;
+  const pendingPoints = totalPoints - managedPoints;
+
+  const totalCarga = (localSnapshot || []).reduce((sum, d) => d.tipo === 'OC' ? sum : sum + (d.totalAmount ?? d.totalPendiente ?? 0), 0);
+  const totalEntregado = (localSnapshot || []).reduce((sum, d) => {
+    if (d.tipo === 'OC') return sum;
+    if (d.trackingStatus === 'ENTREGADO' || d.trackingStatus === 'RETIRADO') {
+      return sum + (d.totalAmount ?? d.totalPendiente ?? 0);
+    }
+    return sum;
+  }, 0);
+  const totalNoEntregado = (localSnapshot || []).reduce((sum, d) => {
+    if (d.tipo === 'OC') return sum;
+    if (d.trackingStatus === 'NO ENTREGADO' || d.trackingStatus === 'NO RETIRADO') {
+      return sum + (d.totalAmount ?? d.totalPendiente ?? 0);
+    }
+    return sum;
+  }, 0);
 
   const sortedDocs = React.useMemo(() => {
     return [...(localSnapshot || [])].sort((a, b) => {
@@ -178,7 +198,7 @@ export default function ManifestDetailModal({
 
         {/* Stats Section */}
         <div className="px-4 py-3 md:px-6 md:py-4 bg-white border-b border-slate-100 flex flex-col sm:flex-row gap-3.5 sm:items-center sm:justify-between shrink-0">
-          <div className="flex items-center justify-between sm:justify-start gap-4 md:gap-6">
+          <div className="flex items-center justify-between sm:justify-start gap-4 md:gap-6 flex-wrap">
             <div className="flex flex-col">
               <span className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Estado General</span>
               <div className="flex items-center gap-1.5">
@@ -189,14 +209,18 @@ export default function ManifestDetailModal({
             
             <div className="h-8 w-px bg-slate-100 hidden sm:block" />
 
-            <div className="flex items-center gap-4 md:gap-6">
+            <div className="flex items-center gap-3 sm:gap-4 md:gap-6">
               <div className="flex flex-col items-center">
                 <span className="text-base md:text-lg font-black text-slate-900 leading-none">{totalPoints}</span>
                 <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-1">Ptos Totales</span>
               </div>
               <div className="flex flex-col items-center">
-                <span className="text-base md:text-lg font-black text-emerald-600 leading-none">{completedPoints}</span>
+                <span className="text-base md:text-lg font-black text-emerald-600 leading-none">{deliveredPoints}</span>
                 <span className="text-[9px] font-black text-emerald-500 uppercase tracking-widest mt-1">Entregados</span>
+              </div>
+              <div className="flex flex-col items-center">
+                <span className={`text-base md:text-lg font-black leading-none ${failedPoints > 0 ? 'text-rose-600' : 'text-slate-300'}`}>{failedPoints}</span>
+                <span className={`text-[9px] font-black uppercase tracking-widest mt-1 ${failedPoints > 0 ? 'text-rose-500' : 'text-slate-300'}`}>No Entregados</span>
               </div>
               <div className="flex flex-col items-center">
                 <span className={`text-base md:text-lg font-black leading-none ${pendingPoints > 0 ? 'text-amber-600' : 'text-slate-300'}`}>{pendingPoints}</span>
@@ -205,18 +229,31 @@ export default function ManifestDetailModal({
             </div>
           </div>
 
-          <div className="flex items-center justify-between sm:justify-end gap-3 border-t border-slate-50 pt-2 sm:pt-0 sm:border-0">
-            <span className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest">Progreso</span>
-            <div className="flex items-center gap-3 flex-1 sm:flex-initial">
-              <div className="w-full sm:w-32 bg-slate-100 rounded-full h-2 overflow-hidden border border-slate-200">
+          <div className="flex items-center justify-between sm:justify-end gap-4 border-t border-slate-50 pt-2 sm:pt-0 sm:border-0">
+            <div className="flex flex-col items-end gap-1 w-full sm:w-auto">
+              <div className="flex items-center gap-2">
+                <span className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                  Gestión: <span className="text-slate-700 font-mono font-black">{totalPoints > 0 ? Math.round((managedPoints / totalPoints) * 100) : 0}%</span>
+                </span>
+                <span className="text-slate-300 text-xs">•</span>
+                <span className="text-[9px] md:text-[10px] font-black text-emerald-600 uppercase tracking-widest">
+                  Efectividad: <span className="font-mono font-black">{totalPoints > 0 ? Math.round((deliveredPoints / totalPoints) * 100) : 0}%</span>
+                </span>
+              </div>
+
+              {/* Segmented Progress Bar: Green for Delivered, Rose for Failed */}
+              <div className="w-full sm:w-44 bg-slate-100 rounded-full h-2.5 overflow-hidden border border-slate-200 flex">
                 <div 
-                  className={`h-full transition-all duration-700 ${pendingPoints === 0 ? 'bg-emerald-500' : 'bg-indigo-600'}`}
-                  style={{ width: `${totalPoints > 0 ? (completedPoints/totalPoints)*100 : 0}%` }}
+                  className="h-full bg-emerald-500 transition-all duration-700"
+                  style={{ width: `${totalPoints > 0 ? (deliveredPoints / totalPoints) * 100 : 0}%` }}
+                  title={`Entregados: ${deliveredPoints}`}
+                />
+                <div 
+                  className="h-full bg-rose-500 transition-all duration-700"
+                  style={{ width: `${totalPoints > 0 ? (failedPoints / totalPoints) * 100 : 0}%` }}
+                  title={`No entregados: ${failedPoints}`}
                 />
               </div>
-              <span className="text-xs font-black text-slate-900 font-mono shrink-0">
-                {totalPoints > 0 ? Math.round((completedPoints/totalPoints)*100) : 0}%
-              </span>
             </div>
           </div>
         </div>
@@ -568,11 +605,33 @@ export default function ManifestDetailModal({
               <span className="text-xs font-bold text-slate-700">{vehicleMap[manifest.vehicleId] || 'No definido'}</span>
             </div>
           </div>
-          <div className="text-right w-full sm:w-auto flex items-center sm:flex-col justify-between sm:justify-end border-t border-slate-200/50 sm:border-0 pt-3 sm:pt-0">
-            <p className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-wider">Total Despachado</p>
-            <p className="text-base md:text-xl font-black text-indigo-600 font-mono">
-              ${Math.round((localSnapshot || []).reduce((sum, d) => d.tipo === 'OC' ? sum : sum + (d.totalAmount ?? d.totalPendiente), 0)).toLocaleString('es-CL')}
-            </p>
+          <div className="text-right w-full sm:w-auto flex flex-col sm:items-end justify-between sm:justify-end border-t border-slate-200/50 sm:border-0 pt-3 sm:pt-0">
+            <div className="flex items-center gap-4 justify-between sm:justify-end flex-wrap">
+              <div>
+                <p className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-wider">Total Carga</p>
+                <p className="text-xs md:text-sm font-bold text-slate-600 font-mono">
+                  ${Math.round(totalCarga).toLocaleString('es-CL')}
+                </p>
+              </div>
+              <div className="h-6 w-px bg-slate-200 hidden sm:block" />
+              <div>
+                <p className="text-[9px] md:text-[10px] font-black text-emerald-600 uppercase tracking-wider">Total Entregado</p>
+                <p className="text-sm md:text-lg font-black text-emerald-600 font-mono">
+                  ${Math.round(totalEntregado).toLocaleString('es-CL')}
+                </p>
+              </div>
+              {totalNoEntregado > 0 && (
+                <>
+                  <div className="h-6 w-px bg-slate-200 hidden sm:block" />
+                  <div>
+                    <p className="text-[9px] md:text-[10px] font-black text-rose-500 uppercase tracking-wider">No Entregado</p>
+                    <p className="text-xs md:text-sm font-black text-rose-600 font-mono">
+                      ${Math.round(totalNoEntregado).toLocaleString('es-CL')}
+                    </p>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
       </motion.div>

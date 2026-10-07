@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   X, UserPlus, Shield, Trash2, Edit2, Check, AlertCircle, Loader, Lock, 
-  MapPin, Calendar, ClipboardList, Settings, UploadCloud, Users, List, Truck
+  MapPin, Calendar, ClipboardList, Settings, UploadCloud, Users, List, Truck, FileText
 } from 'lucide-react';
 import { 
   getDocs, doc, setDoc, updateDoc, deleteDoc, onSnapshot 
@@ -42,6 +42,7 @@ export default function UserManagerModal({
     canViewRouteSheets: true,
     canViewResumenRutas: true,
     canViewKPIs: true,
+    canViewRequests: true,
     canEditManifests: true,
     canEditParameters: false,
     canManageUsers: false,
@@ -65,6 +66,7 @@ export default function UserManagerModal({
             canViewRouteSheets: data.permissions?.canViewRouteSheets ?? true,
             canViewResumenRutas: data.permissions?.canViewResumenRutas ?? true,
             canViewKPIs: data.permissions?.canViewKPIs ?? true,
+            canViewRequests: data.permissions?.canViewRequests ?? true,
             canEditPlanning: data.permissions?.canEditPlanning ?? isAtLeastOperator,
             canUploadExcel: data.permissions?.canUploadExcel ?? isAtLeastOperator,
             canEditManifests: data.permissions?.canEditManifests ?? isAtLeastOperator,
@@ -100,6 +102,7 @@ export default function UserManagerModal({
         canViewRouteSheets: true,
         canViewResumenRutas: true,
         canViewKPIs: true,
+        canViewRequests: true,
         canEditManifests: true,
         canEditParameters: true,
         canManageUsers: true,
@@ -112,6 +115,7 @@ export default function UserManagerModal({
         canViewRouteSheets: true,
         canViewResumenRutas: true,
         canViewKPIs: true,
+        canViewRequests: true,
         canEditManifests: true,
         canEditParameters: false,
         canManageUsers: false,
@@ -125,6 +129,7 @@ export default function UserManagerModal({
         canViewRouteSheets: true,
         canViewResumenRutas: true,
         canViewKPIs: true,
+        canViewRequests: true,
         canEditManifests: false,
         canEditParameters: false,
         canManageUsers: false,
@@ -146,6 +151,7 @@ export default function UserManagerModal({
       canViewRouteSheets: true,
       canViewResumenRutas: true,
       canViewKPIs: true,
+      canViewRequests: true,
       canEditManifests: true,
       canEditParameters: false,
       canManageUsers: false,
@@ -446,6 +452,19 @@ export default function UserManagerModal({
                 <label className="flex items-start gap-2.5 cursor-pointer py-1 select-none">
                   <input 
                     type="checkbox"
+                    checked={permissions.canViewRequests}
+                    onChange={(e) => setPermissions({ ...permissions, canViewRequests: e.target.checked })}
+                    className="mt-0.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <div className="flex flex-col">
+                    <span className="text-[11px] font-bold text-slate-700 leading-tight flex items-center gap-1"><FileText className="w-3 h-3 text-indigo-500" /> Ver Solicitudes</span>
+                    <span className="text-[9px] text-slate-400 font-medium">Visualizar y gestionar panel de Solicitudes logísticas</span>
+                  </div>
+                </label>
+
+                <label className="flex items-start gap-2.5 cursor-pointer py-1 select-none">
+                  <input 
+                    type="checkbox"
                     checked={permissions.canEditManifests}
                     onChange={(e) => setPermissions({ ...permissions, canEditManifests: e.target.checked })}
                     className="mt-0.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
@@ -579,6 +598,9 @@ export default function UserManagerModal({
                               )}
                               {u.permissions.canViewKPIs && (
                                 <span className="px-1 bg-slate-100 text-slate-600 text-[8px] font-bold rounded uppercase tracking-wider" title="Ver KPIs y Análisis">KPIs</span>
+                              )}
+                              {u.permissions.canViewRequests && (
+                                <span className="px-1 bg-slate-100 text-slate-600 text-[8px] font-bold rounded uppercase tracking-wider" title="Ver Solicitudes">Solicitudes</span>
                               )}
                               {u.permissions.canEditManifests && (
                                 <span className="px-1 bg-slate-100 text-slate-600 text-[8px] font-bold rounded uppercase tracking-wider" title="Ingresar horarios, KMs, etc.">Entregas</span>

@@ -70,7 +70,11 @@ export default function LoginScreen({ onAuthSuccess }: LoginScreenProps) {
           permissions: {
             canEditPlanning: isDeveloperAdmin,
             canUploadExcel: isDeveloperAdmin,
+            canViewPlanning: true,
             canViewRouteSheets: true, // Everyone gets viewing access to list sheets, but locked down modifications
+            canViewResumenRutas: true,
+            canViewKPIs: true,
+            canViewRequests: true,
             canEditManifests: isDeveloperAdmin,
             canEditParameters: isDeveloperAdmin,
             canManageUsers: isDeveloperAdmin,

@@ -1,10 +1,14 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion } from 'motion/react';
-import { X, MapPin, Plus, Edit2, Trash2, User, Truck, Save, Coins, Calendar as CalendarIcon, Search, CheckCircle2, AlertTriangle, Loader2 } from 'lucide-react';
-import { LogisticsRoute, LogisticsDriver, LogisticsVehicle, LogisticsAssignment } from '../types';
+import { 
+  X, MapPin, Plus, Edit2, Trash2, User, Truck, Save, Coins, 
+  Calendar as CalendarIcon, Search, CheckCircle2, AlertTriangle, 
+  Loader2, Shield, Eye, EyeOff, ClipboardList, Users, Check
+} from 'lucide-react';
+import { LogisticsRoute, LogisticsDriver, LogisticsVehicle, LogisticsAssignment, UserProfile } from '../types';
 import { OFFICIAL_VEHICLES_SEED } from '../data/officialVehicles';
-import { db } from '../firebase';
-import { collection, addDoc, setDoc, doc, deleteDoc, serverTimestamp, getDoc } from 'firebase/firestore';
+import { db, userProfilesCol } from '../firebase';
+import { collection, addDoc, setDoc, doc, deleteDoc, updateDoc, onSnapshot, serverTimestamp, getDoc } from 'firebase/firestore';
 
 const routesCol = collection(db, "routes");
 const driversCol = collection(db, "drivers");
@@ -21,6 +25,8 @@ interface ParametersModalProps {
   setLoading: (val: boolean) => void;
   setSelectedRoutes: React.Dispatch<React.SetStateAction<Set<string>>>;
   fuelCosts?: Record<string, Record<string, Record<string, number>>>;
+  currentUserProfile?: UserProfile | null;
+  onOpenUserManager?: () => void;
 }
 
 const MONTH_KEYS = [
@@ -48,9 +54,86 @@ export default function ParametersModal({
   loading,
   setLoading,
   setSelectedRoutes,
-  fuelCosts = {}
+  fuelCosts = {},
+  currentUserProfile = null,
+  onOpenUserManager
 }: ParametersModalProps) {
-  const [paramsTab, setParamsTab] = useState<'routes' | 'drivers' | 'vehicles' | 'fuelCosts'>('routes');
+  const [paramsTab, setParamsTab] = useState<'routes' | 'drivers' | 'vehicles' | 'fuelCosts' | 'authorizations'>('routes');
+
+  // User profiles state for authorizations parameter
+  const [userProfiles, setUserProfiles] = useState<UserProfile[]>([]);
+  const [loadingProfiles, setLoadingProfiles] = useState(false);
+  const [updatingUserUid, setUpdatingUserUid] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setLoadingProfiles(true);
+    const unsub = onSnapshot(userProfilesCol, (snapshot) => {
+      const list: UserProfile[] = [];
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data() as UserProfile;
+        list.push({ uid: docSnap.id, ...data });
+      });
+      list.sort((a, b) => (a.displayName || a.email || '').localeCompare(b.displayName || b.email || ''));
+      setUserProfiles(list);
+      setLoadingProfiles(false);
+    }, (err) => {
+      console.error("Error loading user profiles in ParametersModal:", err);
+      setLoadingProfiles(false);
+    });
+    return () => unsub();
+  }, [isOpen]);
+
+  const handleToggleRequestsVisibility = async (uid: string, currentVal: boolean, userName: string) => {
+    setUpdatingUserUid(uid);
+    try {
+      const userRef = doc(userProfilesCol, uid);
+      const newVal = !currentVal;
+      await updateDoc(userRef, {
+        "permissions.canViewRequests": newVal
+      });
+      setFeedbackMessage({
+        type: 'success',
+        text: `Visualización de solicitudes ${newVal ? 'HABILITADA' : 'DESHABILITADA'} para "${userName}".`
+      });
+    } catch (err: any) {
+      console.error("Error updating requests visibility:", err);
+      setFeedbackMessage({
+        type: 'error',
+        text: `Error al actualizar autorización: ${err.message || 'Sin permisos'}`
+      });
+    } finally {
+      setUpdatingUserUid(null);
+    }
+  };
+
+  const handleBatchToggleRequests = async (enable: boolean, targetRole?: 'ALL' | 'OPERATOR' | 'VIEWER') => {
+    setLoading(true);
+    try {
+      const targets = userProfiles.filter(u => {
+        if (!targetRole || targetRole === 'ALL') return true;
+        return u.role === targetRole;
+      });
+      for (const u of targets) {
+        const userRef = doc(userProfilesCol, u.uid);
+        await updateDoc(userRef, {
+          "permissions.canViewRequests": enable
+        });
+      }
+      setFeedbackMessage({
+        type: 'success',
+        text: `Visualización de solicitudes ${enable ? 'habilitada' : 'deshabilitada'} para ${targets.length} usuario(s).`
+      });
+    } catch (err: any) {
+      console.error("Error batch updating:", err);
+      setFeedbackMessage({
+        type: 'error',
+        text: `Error en actualización masiva: ${err.message || 'Error'}`
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Delete Confirmation & Feedback States (replaces window.confirm/alert which fail in iframes)
   const [confirmDeleteTarget, setConfirmDeleteTarget] = useState<{
@@ -169,6 +252,16 @@ export default function ParametersModal({
       (d.name || '').toLowerCase().includes(term)
     );
   }, [drivers, searchTerm]);
+
+  const filteredUserProfiles = useMemo(() => {
+    if (!searchTerm.trim()) return userProfiles;
+    const term = searchTerm.toLowerCase().trim();
+    return userProfiles.filter(u => 
+      (u.displayName || '').toLowerCase().includes(term) ||
+      (u.email || '').toLowerCase().includes(term) ||
+      (u.role || '').toLowerCase().includes(term)
+    );
+  }, [userProfiles, searchTerm]);
 
   // Unique list of existing route groups
   const existingRouteGroups = useMemo(() => {
@@ -541,13 +634,13 @@ export default function ParametersModal({
         initial={{ scale: 0.95, opacity: 0, y: 20 }}
         animate={{ scale: 1, opacity: 1, y: 0 }}
         exit={{ scale: 0.95, opacity: 0, y: 20 }}
-        className={`relative w-full ${paramsTab === 'vehicles' || paramsTab === 'fuelCosts' ? 'max-w-6xl w-[95vw]' : 'max-w-2xl'} bg-white rounded-2xl shadow-2xl overflow-hidden border border-slate-200 z-10 transition-all duration-300`}
+        className={`relative w-full ${paramsTab === 'vehicles' || paramsTab === 'fuelCosts' || paramsTab === 'authorizations' ? 'max-w-6xl w-[95vw]' : 'max-w-2xl'} bg-white rounded-2xl shadow-2xl overflow-hidden border border-slate-200 z-10 transition-all duration-300`}
         id="parameters-modal-content"
       >
         <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50">
           <div>
             <h2 className="text-sm font-bold text-slate-900">Configuración de Parámetros</h2>
-            <p className="text-[10px] text-slate-500 font-medium tracking-tight">Gestiona tus rutas, conductores, vehículos y costos de combustible</p>
+            <p className="text-[10px] text-slate-500 font-medium tracking-tight">Gestiona tus rutas, conductores, vehículos, combustible y autorizaciones</p>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-slate-200 rounded-full transition-colors text-slate-400">
             <X className="w-4 h-4" />
@@ -583,6 +676,14 @@ export default function ParametersModal({
           >
             <Coins className="w-3.5 h-3.5 text-amber-500" />
             <span>Combustible</span>
+          </button>
+          <button 
+            type="button"
+            onClick={() => setParamsTab('authorizations')}
+            className={`flex-1 py-3 text-xs font-bold transition-all border-b-2 cursor-pointer flex items-center justify-center gap-1.5 ${paramsTab === 'authorizations' ? 'border-indigo-600 text-indigo-600 bg-indigo-50/30' : 'border-transparent text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
+          >
+            <Shield className="w-3.5 h-3.5 text-indigo-600" />
+            <span>Autorizaciones</span>
           </button>
         </div>
 
@@ -623,6 +724,7 @@ export default function ParametersModal({
                 paramsTab === 'vehicles' ? "Buscar vehículo por patente, modelo, RUT, motor, chasis, combustible..." :
                 paramsTab === 'routes' ? "Buscar ruta por nombre o agrupador..." :
                 paramsTab === 'drivers' ? "Buscar conductor por nombre..." :
+                paramsTab === 'authorizations' ? "Buscar usuario por nombre, correo o rol..." :
                 "Buscar vehículo por patente o modelo..."
               }
               className="w-full bg-white border border-slate-200 rounded-xl pl-10 pr-9 py-2 text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 focus:outline-none shadow-2xs transition-all placeholder:text-slate-400"
@@ -643,12 +745,13 @@ export default function ParametersModal({
               {paramsTab === 'vehicles' ? `${filteredVehicles.length} de ${vehicles.length}` :
                paramsTab === 'routes' ? `${filteredRoutes.length} de ${routes.length}` :
                paramsTab === 'drivers' ? `${filteredDrivers.length} de ${drivers.length}` :
+               paramsTab === 'authorizations' ? `${filteredUserProfiles.length} de ${userProfiles.length}` :
                `${filteredVehicles.length} de ${vehicles.length}`}
             </span>
           )}
         </div>
 
-        <div className="p-6 max-h-[450px] overflow-y-auto">
+        <div className={`p-6 ${paramsTab === 'authorizations' || paramsTab === 'vehicles' || paramsTab === 'fuelCosts' ? 'max-h-[70vh]' : 'max-h-[450px]'} overflow-y-auto`}>
           {paramsTab === 'routes' && (
             <div>
               <div className="bg-slate-50/80 border border-slate-200/80 rounded-2xl p-4 mb-6 shadow-inner text-left">
@@ -1615,6 +1718,213 @@ export default function ParametersModal({
                       })}
                   </tbody>
                 </table>
+              </div>
+            </div>
+          )}
+
+          {paramsTab === 'authorizations' && (
+            <div className="space-y-5 text-left">
+              {/* Header card explaining the parameter */}
+              <div className="bg-gradient-to-r from-indigo-900/10 via-slate-50 to-indigo-50/40 border border-indigo-200/80 rounded-2xl p-4 shadow-inner">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center text-white shrink-0 shadow-md shadow-indigo-600/20">
+                      <Shield className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
+                        <span>Parámetro de Autorizaciones</span>
+                        <span className="px-2 py-0.5 rounded-full text-[9px] bg-indigo-100 text-indigo-700 font-bold">
+                          Visualización de Solicitudes
+                        </span>
+                      </h4>
+                      <p className="text-[11px] text-slate-600 mt-0.5">
+                        Define qué usuarios y roles tienen autorización para visualizar la pestaña <strong>Solicitudes</strong>, su contador de pendientes y las alarmas sonoras del sistema.
+                      </p>
+                    </div>
+                  </div>
+
+                  {onOpenUserManager && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onClose();
+                        onOpenUserManager();
+                      }}
+                      className="px-3 py-1.5 bg-white border border-indigo-200 hover:border-indigo-400 text-indigo-700 hover:bg-indigo-50 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 shadow-xs cursor-pointer"
+                      title="Abrir gestor completo de usuarios y contraseñas"
+                    >
+                      <Users className="w-3.5 h-3.5" />
+                      <span>Gestión de Cuentas</span>
+                    </button>
+                  )}
+                </div>
+
+                {/* Batch toggles */}
+                <div className="flex flex-wrap items-center gap-2 mt-4 pt-3 border-t border-indigo-100/80">
+                  <span className="text-[10px] font-extrabold uppercase text-slate-400">Acciones Rápidas:</span>
+                  <button
+                    type="button"
+                    onClick={() => handleBatchToggleRequests(true, 'ALL')}
+                    disabled={loading}
+                    className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-[10px] font-bold shadow-xs transition-all flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                  >
+                    <Eye className="w-3 h-3" />
+                    <span>Habilitar a Todos</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleBatchToggleRequests(false, 'VIEWER')}
+                    disabled={loading}
+                    className="px-2.5 py-1 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-[10px] font-bold shadow-xs transition-all flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                  >
+                    <EyeOff className="w-3 h-3" />
+                    <span>Ocultar a Visores</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleBatchToggleRequests(false, 'ALL')}
+                    disabled={loading}
+                    className="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-[10px] font-bold shadow-xs transition-all flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                  >
+                    <EyeOff className="w-3 h-3" />
+                    <span>Restringir Todos</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Table of user authorizations */}
+              <div className="border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-sm">
+                <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+                  <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider flex items-center gap-1.5">
+                    <ClipboardList className="w-3.5 h-3.5 text-indigo-500" />
+                    <span>Listado de Usuarios y Estado de Autorización</span>
+                  </span>
+                  <span className="text-[10px] font-bold text-slate-400">
+                    {filteredUserProfiles.length} usuarios registrados
+                  </span>
+                </div>
+
+                {loadingProfiles ? (
+                  <div className="py-12 flex flex-col items-center justify-center text-slate-400 gap-2">
+                    <Loader2 className="w-6 h-6 animate-spin text-indigo-600" />
+                    <span className="text-xs font-semibold">Cargando autorizaciones...</span>
+                  </div>
+                ) : filteredUserProfiles.length === 0 ? (
+                  <div className="py-12 text-center text-slate-400 text-xs italic">
+                    No se encontraron usuarios coincidentes.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto divide-y divide-slate-100">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="text-[9px] font-extrabold uppercase text-slate-400 tracking-wider bg-slate-50/60 border-b border-slate-100">
+                          <th className="px-4 py-2.5">Usuario / Correo</th>
+                          <th className="px-3 py-2.5">Rol</th>
+                          <th className="px-4 py-2.5 text-center">Visualizar Solicitudes</th>
+                          <th className="px-4 py-2.5">Otros Accesos</th>
+                          <th className="px-4 py-2.5 text-right">Estado</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 text-xs">
+                        {filteredUserProfiles.map((u) => {
+                          const isAllowed = u.permissions?.canViewRequests !== false;
+                          const isUpdating = updatingUserUid === u.uid;
+
+                          return (
+                            <tr key={u.uid} className="hover:bg-slate-50/70 transition-colors">
+                              <td className="px-4 py-3">
+                                <div className="flex flex-col">
+                                  <span className="font-bold text-slate-800 flex items-center gap-1.5">
+                                    {u.displayName || 'Sin Nombre'}
+                                    {u.uid === currentUserProfile?.uid && (
+                                      <span className="px-1.5 py-0.2 bg-indigo-100 text-indigo-700 rounded text-[8px] font-bold">
+                                        TÚ
+                                      </span>
+                                    )}
+                                  </span>
+                                  <span className="text-[10px] text-slate-400 font-mono">
+                                    {u.email}
+                                  </span>
+                                </div>
+                              </td>
+                              <td className="px-3 py-3">
+                                <span className={`px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase ${
+                                  u.role === 'ADMIN'
+                                    ? 'bg-red-50 text-red-700 border border-red-200'
+                                    : u.role === 'OPERATOR'
+                                    ? 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                                    : 'bg-slate-100 text-slate-600 border border-slate-200'
+                                }`}>
+                                  {u.role === 'ADMIN' ? 'Admin' : u.role === 'OPERATOR' ? 'Operador' : 'Visor'}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 text-center">
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleRequestsVisibility(u.uid, isAllowed, u.displayName || u.email)}
+                                  disabled={isUpdating}
+                                  className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-xl font-bold text-xs transition-all shadow-xs cursor-pointer border ${
+                                    isAllowed
+                                      ? 'bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-600 hover:shadow-emerald-200'
+                                      : 'bg-slate-100 hover:bg-slate-200 text-slate-600 border-slate-300'
+                                  }`}
+                                  title={isAllowed ? "Clic para bloquear la visualización de solicitudes a este usuario" : "Clic para autorizar la visualización de solicitudes a este usuario"}
+                                >
+                                  {isUpdating ? (
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                  ) : isAllowed ? (
+                                    <>
+                                      <Eye className="w-3.5 h-3.5" />
+                                      <span>Visualización Permitida</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <EyeOff className="w-3.5 h-3.5 text-slate-400" />
+                                      <span>Oculto / Sin Visualización</span>
+                                    </>
+                                  )}
+                                </button>
+                              </td>
+                              <td className="px-4 py-3">
+                                <div className="flex flex-wrap gap-1 max-w-xs">
+                                  {u.permissions?.canViewPlanning && (
+                                    <span className="px-1 bg-slate-100 text-slate-600 text-[8px] font-bold rounded">Planif</span>
+                                  )}
+                                  {u.permissions?.canViewRouteSheets && (
+                                    <span className="px-1 bg-slate-100 text-slate-600 text-[8px] font-bold rounded">Reportes</span>
+                                  )}
+                                  {u.permissions?.canViewResumenRutas && (
+                                    <span className="px-1 bg-slate-100 text-slate-600 text-[8px] font-bold rounded">Resumen</span>
+                                  )}
+                                  {u.permissions?.canViewKPIs && (
+                                    <span className="px-1 bg-slate-100 text-slate-600 text-[8px] font-bold rounded">KPIs</span>
+                                  )}
+                                  {u.permissions?.canEditPlanning && (
+                                    <span className="px-1 bg-indigo-50 text-indigo-600 text-[8px] font-bold rounded">Rutas</span>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="px-4 py-3 text-right">
+                                {isAllowed ? (
+                                  <span className="inline-flex items-center gap-1 text-[10px] font-extrabold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                                    <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                    <span>Visible</span>
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 text-[10px] font-extrabold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200">
+                                    <AlertTriangle className="w-3 h-3 text-rose-600" />
+                                    <span>Oculto</span>
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             </div>
           )}

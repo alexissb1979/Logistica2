@@ -129,6 +129,57 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
     return cleaned || 'SIN ASIGNAR';
   };
 
+  // Helper to calculate balanced integer percentages for two complementary quantities
+  // that must strictly sum to 100% when there is at least one item (eliminates independent rounding anomalies like 88% + 13% = 101%)
+  const getComplementaryPercentages = (countA: number, countB: number): [number, number] => {
+    const total = countA + countB;
+    if (total <= 0) return [0, 0];
+    if (countA <= 0) return [0, 100];
+    if (countB <= 0) return [100, 0];
+
+    const rawA = (countA / total) * 100;
+    const rawB = (countB / total) * 100;
+
+    let roundA = Math.round(rawA);
+    let roundB = Math.round(rawB);
+
+    const diff = 100 - (roundA + roundB);
+    if (diff === -1) {
+      // Both numbers had a fractional part of .5 (e.g., 87.5% and 12.5%) and both rounded up to 88% and 13% (sum = 101%).
+      // We apply round-half-to-even (banker's rounding) to ensure an exact 100% sum:
+      // The odd integer is rounded down to the nearest even number (e.g., 13 becomes 12, so 88% + 12% = 100%).
+      if (roundA % 2 !== 0 && roundB % 2 === 0) {
+        roundA--;
+      } else if (roundB % 2 !== 0 && roundA % 2 === 0) {
+        roundB--;
+      } else {
+        const fracA = rawA - Math.floor(rawA);
+        const fracB = rawB - Math.floor(rawB);
+        if (fracA < fracB) {
+          roundA--;
+        } else {
+          roundB--;
+        }
+      }
+    } else if (diff === 1) {
+      if (roundA % 2 !== 0 && roundB % 2 === 0) {
+        roundA++;
+      } else if (roundB % 2 !== 0 && roundA % 2 === 0) {
+        roundB++;
+      } else {
+        const fracA = rawA - Math.floor(rawA);
+        const fracB = rawB - Math.floor(rawB);
+        if (fracA > fracB) {
+          roundA++;
+        } else {
+          roundB++;
+        }
+      }
+    }
+
+    return [roundA, roundB];
+  };
+
   // Helper to obtain group name prioritizing route.group then cleaned name
   const getRouteGroupName = useCallback((routeId?: string): string => {
     if (!routeId) return 'SIN ASIGNAR';
@@ -1104,8 +1155,7 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
       .map(item => {
         const successRate = item.totalDocs > 0 ? Math.round((item.deliveredDocs / item.totalDocs) * 100) : 0;
         const avgKm = item.kmCount > 0 ? Math.round(item.totalKm / item.kmCount) : 0;
-        const pctEntregas = item.totalDocs > 0 ? Math.round((item.totalEntregas / item.totalDocs) * 100) : 0;
-        const pctRetiros = item.totalDocs > 0 ? Math.round((item.totalRetiros / item.totalDocs) * 100) : 0;
+        const [pctEntregas, pctRetiros] = getComplementaryPercentages(item.totalEntregas, item.totalRetiros);
         const efectividadEntregas = item.totalEntregas > 0 ? Math.round((item.entregasExitosas / item.totalEntregas) * 100) : 0;
         const efectividadRetiros = item.totalRetiros > 0 ? Math.round((item.retirosExitosos / item.totalRetiros) * 100) : 0;
 
@@ -1144,8 +1194,7 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
       totalRetirosExitosos += d['Retiros Exitosos'];
     });
 
-    const pctEntregas = totalDocs > 0 ? Math.round((totalEntregas / totalDocs) * 100) : 0;
-    const pctRetiros = totalDocs > 0 ? Math.round((totalRetiros / totalDocs) * 100) : 0;
+    const [pctEntregas, pctRetiros] = getComplementaryPercentages(totalEntregas, totalRetiros);
     const efectividadEntregas = totalEntregas > 0 ? Math.round((totalEntregasExitosas / totalEntregas) * 100) : 0;
     const efectividadRetiros = totalRetiros > 0 ? Math.round((totalRetirosExitosos / totalRetiros) * 100) : 0;
 
@@ -3145,7 +3194,10 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
                             <td className="px-2.5 py-2 text-center bg-emerald-50/20">
                               <div className="flex items-center justify-center gap-1">
                                 <span className="font-black text-slate-800 font-mono text-xs">{d.Entregas}</span>
-                                <span className="text-[10px] font-extrabold text-emerald-700 bg-emerald-100/70 px-1 py-0.2 rounded font-mono">
+                                <span 
+                                  className="text-[10px] font-extrabold text-emerald-700 bg-emerald-100/70 px-1 py-0.2 rounded font-mono"
+                                  title={`${d.Entregas} entregas de ${d.Documentos} total (${d.Documentos > 0 ? ((d.Entregas / d.Documentos) * 100).toFixed(1) : 0}%)`}
+                                >
                                   {d['Entregas (%)']}%
                                 </span>
                               </div>
@@ -3153,7 +3205,10 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
                             <td className="px-2.5 py-2 text-center bg-indigo-50/20">
                               <div className="flex items-center justify-center gap-1">
                                 <span className="font-black text-slate-800 font-mono text-xs">{d.Retiros}</span>
-                                <span className="text-[10px] font-extrabold text-indigo-700 bg-indigo-100/70 px-1 py-0.2 rounded font-mono">
+                                <span 
+                                  className="text-[10px] font-extrabold text-indigo-700 bg-indigo-100/70 px-1 py-0.2 rounded font-mono"
+                                  title={`${d.Retiros} retiros de ${d.Documentos} total (${d.Documentos > 0 ? ((d.Retiros / d.Documentos) * 100).toFixed(1) : 0}%)`}
+                                >
                                   {d['Retiros (%)']}%
                                 </span>
                               </div>
