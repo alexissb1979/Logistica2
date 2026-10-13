@@ -876,6 +876,39 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
       });
   }, [processedData]);
 
+  const efficiencyByDayData = useMemo(() => {
+    const days: Record<number, { successfulDocs: number; totalDocs: number }> = {
+      0: { successfulDocs: 0, totalDocs: 0 }, // Domingo
+      1: { successfulDocs: 0, totalDocs: 0 },
+      2: { successfulDocs: 0, totalDocs: 0 },
+      3: { successfulDocs: 0, totalDocs: 0 },
+      4: { successfulDocs: 0, totalDocs: 0 },
+      5: { successfulDocs: 0, totalDocs: 0 },
+      6: { successfulDocs: 0, totalDocs: 0 },
+    };
+
+    processedData.forEach(m => {
+      if (!m.date) return;
+      const date = new Date(m.date + 'T12:00:00');
+      const day = date.getDay();
+      
+      const docs = m.documentsSnapshot || [];
+      days[day].totalDocs += docs.length;
+      
+      docs.forEach(d => {
+        if (d.trackingStatus === 'ENTREGADO' || d.trackingStatus === 'RETIRADO') {
+          days[day].successfulDocs++;
+        }
+      });
+    });
+
+    const dayNames = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+    return Object.entries(days).map(([dayIdx, data]) => ({
+      dia: dayNames[Number(dayIdx)],
+      'Efectividad (%)': data.totalDocs > 0 ? Math.round((data.successfulDocs / data.totalDocs) * 100) : 0,
+    }));
+  }, [processedData]);
+
   // 4. Distribution of order tracking status for Pie Chart
   const trackingStatusDistribution = useMemo(() => {
     let entregados = 0;
@@ -2183,6 +2216,64 @@ export const KPIDashboard: React.FC<KPIDashboardProps> = ({
                     </ResponsiveContainer>
                   </div>
                 )}
+              </div>
+
+              {/* Chart B: Efficiency by Day of the Week */}
+              <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm flex flex-col justify-between h-[420px]">
+                <div className="mb-4">
+                  <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5 leading-none">
+                    <Calendar className="w-4 h-4 text-emerald-600" /> Efectividad por Día
+                  </h3>
+                  <p className="text-[10px] text-slate-400 font-medium">Promedio de efectividad desglosado por día de la semana.</p>
+                </div>
+                
+                <div className="flex-1 h-full w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={efficiencyByDayData}
+                      margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                      <XAxis 
+                        dataKey="dia" 
+                        tickLine={false} 
+                        axisLine={false}
+                        tick={{ fill: '#64748b', fontSize: 10, fontWeight: 'bold' }} 
+                      />
+                      <YAxis 
+                        tickLine={false} 
+                        axisLine={false}
+                        tick={{ fill: '#64748b', fontSize: 10 }}
+                        domain={[0, 100]}
+                      />
+                      <Tooltip 
+                        contentStyle={{ 
+                          backgroundColor: '#0f172a', 
+                          border: 'none', 
+                          borderRadius: '16px', 
+                          boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)', 
+                          color: '#fff',
+                          fontSize: '11px',
+                          fontWeight: 'bold'
+                        }} 
+                        formatter={(value) => [`${value}%`, 'Efectividad']}
+                      />
+                      <Bar 
+                        dataKey="Efectividad (%)" 
+                        fill="#10b981" 
+                        radius={[6, 6, 0, 0]} 
+                        maxBarSize={40}
+                      >
+                        <LabelList
+                          dataKey="Efectividad (%)"
+                          position="top"
+                          formatter={(val: any) => `${val}%`}
+                          style={{ fill: '#334155', fontSize: 10, fontWeight: 'bold' }}
+                        />
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
               </div>
 
               {/* Chart B: Order Tracking Distribution (Pie chart showing delivery metrics) */}
